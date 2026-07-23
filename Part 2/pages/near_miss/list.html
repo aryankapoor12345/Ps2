@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Near Miss Reports - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 id="list-title">Near Miss Reports</h2>
+                <a href="/pages/near_miss/create.html" class="plain-link-button">+ Report Near Miss</a>
+            </div>
+            
+            <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th width="15%">Report ID</th>
+                        <th>Incident details / Location</th>
+                        <th width="20%">Zone / Department</th>
+                        <th width="15%">Incident Date</th>
+                        <th width="15%">Status</th>
+                        <th width="10%">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="near-miss-list-body">
+                    <tr><td colspan="6" align="center">Loading reports...</td></tr>
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { collection, query, where, orderBy, getDocs } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { getStatusBadge, formatDate } from '/firebase/utils.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        await loadNearMissList(user);
+    }).catch(err => {
+        console.error("Near miss list load error:", err);
+    });
+
+    async function loadNearMissList(user) {
+        const body = document.getElementById('near-miss-list-body');
+        const role = user.role;
+        const nmRef = collection(db, 'near_miss_reports');
+        
+        let q;
+        if (role === 'ADMIN' || role === 'SAFETY_ADMIN') {
+            q = query(nmRef, orderBy('created_at', 'desc'));
+        } else {
+            q = query(nmRef, where('reported_by', '==', user.uid || user.id), orderBy('created_at', 'desc'));
+        }
+
+        try {
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                body.innerHTML = `<tr><td colspan="6" align="center" style="color:#777; font-style:italic;">No near miss incidents reported.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            snapshot.docs.forEach(docSnap => {
+                const nm = docSnap.data();
+                html += `
+                    <tr>
+                        <td><strong>${nm.near_miss_no}</strong></td>
+                        <td>
+                            <strong>${nm.incident_location}</strong>
+                            <div style="font-size:11px; color:#555; margin-top:2px;">${nm.incident_description.substring(0,80)}...</div>
+                        </td>
+                        <td>
+                            ${nm.zone_name}<br>
+                            <span style="font-size:11px; color:#666;">Dept: ${nm.department_name}</span>
+                        </td>
+                        <td>${formatDate(nm.incident_date)}${nm.incident_time ? ` ${nm.incident_time}` : ''}</td>
+                        <td>${getStatusBadge(nm.status_name || 'Reported')}</td>
+                        <td>
+                            <a href="/pages/near_miss/view.html?id=${docSnap.id}" class="plain-link-button">View</a>
+                        </td>
+                    </tr>
+                `;
+            });
+            body.innerHTML = html;
+        } catch (e) {
+            console.error("Error listing near misses:", e);
+            body.innerHTML = `<tr><td colspan="6" align="center" style="color:red;">Failed to retrieve records: ${e.message}</td></tr>`;
+        }
+    }
+</script>
+</body>
+</html>

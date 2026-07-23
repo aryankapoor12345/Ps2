@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+    <link rel="stylesheet" href="/assets/css/print.css" media="print">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div id="flash-container"></div>
+            
+            <h2 id="welcome-message">Welcome</h2>
+            
+            <div id="dashboard-view">
+                <p style="color: #666; font-style: italic;">Loading dashboard details...</p>
+            </div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { getDashboardData } from '/firebase/dashboard.js';
+    import { getStatusBadge, getPriorityBadge, getDueDateBadge, formatDate } from '/firebase/utils.js';
+
+    // Verify authentication and enforce access
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        // Render common layout elements
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        document.getElementById('welcome-message').innerText = `Welcome - ${user.full_name}`;
+        
+        // Fetch dashboard statistics and data
+        const data = await getDashboardData(user);
+        renderDashboardView(user, data);
+    }).catch(err => {
+        console.error("Dashboard initialization failed:", err);
+    });
+
+    // Helper to render role-specific dashboard views
+    function renderDashboardView(user, data) {
+        const container = document.getElementById('dashboard-view');
+        const role = user.role;
+        const stats = data.stats;
+        const pending = data.pendingList;
+        
+        let html = '';
+        
+        // 1. Grid Cards depending on role
+        if (role === 'ADMIN' || role === 'SAFETY_ADMIN') {
+            html += `
+                <div class="notification-grid">
+                    <div class="notif-card card-blue">
+                        <div class="notif-count">${stats.pending}</div>
+                        <div class="notif-label">Total Pending</div>
+                    </div>
+                    <div class="notif-card card-red">
+                        <div class="notif-count">${stats.overdue}</div>
+                        <div class="notif-label">Total Overdue</div>
+                    </div>
+                    <div class="notif-card card-green">
+                        <div class="notif-count">${stats.closedToday}</div>
+                        <div class="notif-label">Closed Today</div>
+                    </div>
+                </div>
+                
+                <table class="dashboard-count-table" cellpadding="4" cellspacing="0" style="margin-top:20px; width:100%;">
+                    <tr>
+                        <td><span>${stats.total}</span><br>Total Observations</td>
+                        <td><span>${data.suggestionsCount}</span><br>Safety Suggestions</td>
+                        <td><span>${data.nearMissCount}</span><br>Reported Nearmiss</td>
+                    </tr>
+                </table>
+            `;
+        } else if (role === 'USER') {
+            html += `
+                <div class="notification-grid">
+                    <div class="notif-card card-blue">
+                        <div class="notif-count">${stats.total}</div>
+                        <div class="notif-label">Total Reported</div>
+                    </div>
+                    <div class="notif-card card-orange">
+                        <div class="notif-count">${stats.underReview}</div>
+                        <div class="notif-label">Under Review</div>
+                    </div>
+                    <div class="notif-card card-yellow">
+                        <div class="notif-count">${stats.activeWork}</div>
+                        <div class="notif-label">Active Remediation</div>
+                    </div>
+                    <div class="notif-card card-green">
+                        <div class="notif-count">${stats.closed}</div>
+                        <div class="notif-label">Closed Cases</div>
+                    </div>
+                </div>
+            `;
+        } else if (role === 'SUB_LEADER') {
+            html += `
+                <div class="notification-grid">
+                    <div class="notif-card card-blue">
+                        <div class="notif-count">${stats.pending}</div>
+                        <div class="notif-label">Total Pending</div>
+                    </div>
+                    <div class="notif-card card-orange">
+                        <div class="notif-count">${stats.underReview}</div>
+                        <div class="notif-label">Awaiting Review</div>
+                    </div>
+                    <div class="notif-card card-red">
+                        <div class="notif-count">${stats.overdue}</div>
+                        <div class="notif-label">Total Overdue</div>
+                    </div>
+                </div>
+            `;
+        } else if (role === 'ZONE_LEADER') {
+            html += `
+                <div class="notification-grid">
+                    <div class="notif-card card-blue">
+                        <div class="notif-count">${stats.pending}</div>
+                        <div class="notif-label">Total Pending</div>
+                    </div>
+                    <div class="notif-card card-purple">
+                        <div class="notif-count">${stats.awaitingVerification}</div>
+                        <div class="notif-label">Awaiting Verification</div>
+                    </div>
+                    <div class="notif-card card-red">
+                        <div class="notif-count">${stats.overdue}</div>
+                        <div class="notif-label">Total Overdue</div>
+                    </div>
+                </div>
+            `;
+        } else if (role === 'EIC') {
+            html += `
+                <div class="notification-grid">
+                    <div class="notif-card card-blue">
+                        <div class="notif-count">${stats.awaitingAssignment}</div>
+                        <div class="notif-label">Awaiting Assignment</div>
+                    </div>
+                    <div class="notif-card card-yellow">
+                        <div class="notif-count">${stats.activeWork}</div>
+                        <div class="notif-label">Active Jobs</div>
+                    </div>
+                    <div class="notif-card card-purple">
+                        <div class="notif-count">${stats.awaitingVerification}</div>
+                        <div class="notif-label">Awaiting Review</div>
+                    </div>
+                </div>
+            `;
+        } else if (role === 'AGENCY') {
+            html += `
+                <div class="notification-grid">
+                    <div class="notif-card card-blue">
+                        <div class="notif-count">${stats.newJobs}</div>
+                        <div class="notif-label">New Jobs</div>
+                    </div>
+                    <div class="notif-card card-yellow">
+                        <div class="notif-count">${stats.wipJobs}</div>
+                        <div class="notif-label">Work In Progress</div>
+                    </div>
+                    <div class="notif-card card-green">
+                        <div class="notif-count">${stats.completedJobs}</div>
+                        <div class="notif-label">Completed Jobs</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 2. Action title
+        let actionTitle = 'Pending Actions';
+        if (role === 'USER') actionTitle = 'My Safety Observations';
+        else if (role === 'EIC') actionTitle = 'My Action Items';
+        else if (role === 'AGENCY') actionTitle = 'Assigned Safety Actions';
+        
+        html += `
+            <div class="dashboard-actions-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:25px;">
+                <span>${actionTitle}</span>
+                ${role === 'USER' ? '<a href="/pages/observations/create.html" class="plain-link-button" style="font-size: 11px; padding: 2px 8px;">+ Report New Observation</a>' : ''}
+            </div>
+        `;
+
+        // 3. Table of observations
+        html += `
+            <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th>Observation ID</th>
+                        <th>Title / Location</th>
+                        <th>Priority / Risk</th>
+                        <th>Due Date</th>
+                        <th>Current Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        if (pending.length === 0) {
+            html += `<tr><td colspan="6" align="center">No observations currently pending.</td></tr>`;
+        } else {
+            pending.forEach(obs => {
+                const priority = obs.priority || obs.risk_level || 'Medium';
+                const dueDate = obs.target_closing_date || '';
+                
+                html += `
+                    <tr>
+                        <td><strong>${obs.observation_no}</strong></td>
+                        <td>
+                            <strong>${obs.department_name || ''}</strong> - ${obs.specific_area_location || ''}
+                            <div style="font-size:11px; color:#666; margin-top:2px;">
+                                ${formatDate(obs.observation_date)} | Zone: ${obs.zone_short_name || obs.zone_code || ''}
+                            </div>
+                        </td>
+                        <td>${getPriorityBadge(priority)}</td>
+                        <td>${getDueDateBadge(dueDate)}</td>
+                        <td>${getStatusBadge(obs.status_name)}</td>
+                        <td><a href="/pages/observations/view.html?id=${obs.id}" class="plain-link-button">Take Action</a></td>
+                    </tr>
+                `;
+            });
+        }
+
+        html += `
+                </tbody>
+            </table>
+        `;
+
+        // 4. Bar Chart for Admin Dashboard
+        if ((role === 'ADMIN' || role === 'SAFETY_ADMIN') && Object.keys(data.zoneCounts).length > 0) {
+            html += `
+                <h3 style="margin-top:30px; border-bottom:1px solid #eaeaea; padding-bottom:5px;">Observations By Zone</h3>
+                <table class="chart-table" cellpadding="2" cellspacing="0" style="width:100%;">
+            `;
+
+            // Find maximum count for percentage scaling
+            const maxVal = Math.max(...Object.values(data.zoneCounts), 1);
+            
+            // Sort zones alphabetically/order
+            const sortedZones = Object.keys(data.zoneCounts).sort();
+            sortedZones.forEach(zName => {
+                const count = data.zoneCounts[zName];
+                const percent = Math.round((count / maxVal) * 100);
+                html += `
+                    <tr>
+                        <td class="bar-label" width="25%">${zName}</td>
+                        <td class="bar-cell">
+                            <div class="dashboard-bar-track">
+                                <div class="dashboard-bar-fill" style="width: ${percent}%;"></div>
+                            </div>
+                        </td>
+                        <td class="bar-value" width="5%">${count}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                </table>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+</script>
+</body>
+</html>

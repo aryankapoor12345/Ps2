@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <h2>Safety Analytics Dashboard</h2>
+            <p class="info-txt">Real-time statistics and breakdowns of safety portal observations, suggestions, and near-misses.</p>
+
+            <!-- Metrics Summary Cards -->
+            <div class="notification-grid" style="margin-top:20px; margin-bottom:30px;">
+                <div class="notif-card card-blue">
+                    <div class="notif-count" id="count-obs">0</div>
+                    <div class="notif-label">Observations Recorded</div>
+                </div>
+                <div class="notif-card card-orange">
+                    <div class="notif-count" id="count-sug">0</div>
+                    <div class="notif-label">Suggestions Submitted</div>
+                </div>
+                <div class="notif-card card-yellow">
+                    <div class="notif-count" id="count-nm">0</div>
+                    <div class="notif-label">Near Miss Reports</div>
+                </div>
+            </div>
+
+            <!-- Charts Row 1 -->
+            <div style="display:flex; justify-content:space-between; gap:25px; margin-bottom:30px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:320px; background:#fff; padding:15px; border:1px solid #eaeaea; border-radius:4px;">
+                    <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px; margin-bottom:15px;">Status Distribution</h3>
+                    <div style="max-height: 280px; display: flex; justify-content: center;">
+                        <canvas id="chart-status" width="280" height="280"></canvas>
+                    </div>
+                </div>
+                
+                <div style="flex:1; min-width:320px; background:#fff; padding:15px; border:1px solid #eaeaea; border-radius:4px;">
+                    <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px; margin-bottom:15px;">Priority Breakdown</h3>
+                    <div style="max-height: 280px;">
+                        <canvas id="chart-priority"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row 2 -->
+            <div style="display:flex; justify-content:space-between; gap:25px; margin-bottom:30px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:320px; background:#fff; padding:15px; border:1px solid #eaeaea; border-radius:4px;">
+                    <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px; margin-bottom:15px;">Department Breakdown</h3>
+                    <div>
+                        <canvas id="chart-dept"></canvas>
+                    </div>
+                </div>
+                
+                <div style="flex:1; min-width:320px; background:#fff; padding:15px; border:1px solid #eaeaea; border-radius:4px;">
+                    <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px; margin-bottom:15px;">Zone Breakdown</h3>
+                    <div>
+                        <canvas id="chart-zone"></canvas>
+                    </div>
+                </div>
+            </div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { getReportingData } from '/firebase/reports.js';
+    import { db } from '/firebase/firebase.js';
+    import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        await renderAnalytics();
+    }).catch(err => {
+        console.error("Analytics initialization failed:", err);
+    });
+
+    async function renderAnalytics() {
+        const obs = await getReportingData();
+        const sugSnap = await getDocs(collection(db, 'safety_suggestions'));
+        const nmSnap = await getDocs(collection(db, 'near_miss_reports'));
+        
+        document.getElementById('count-obs').innerText = obs.length;
+        document.getElementById('count-sug').innerText = sugSnap.size;
+        document.getElementById('count-nm').innerText = nmSnap.size;
+
+        // Group counts
+        let statusMap = {};
+        let priorityMap = {};
+        let deptMap = {};
+        let zoneMap = {};
+
+        obs.forEach(o => {
+            const status = o.status_name || 'Reported';
+            statusMap[status] = (statusMap[status] || 0) + 1;
+            
+            const p = o.priority || o.risk_level || 'Medium';
+            priorityMap[p] = (priorityMap[p] || 0) + 1;
+            
+            const dept = o.department_name || 'Unspecified';
+            deptMap[dept] = (deptMap[dept] || 0) + 1;
+            
+            const zone = o.zone_short_name || o.zone_code || 'Unspecified';
+            zoneMap[zone] = (zoneMap[zone] || 0) + 1;
+        });
+
+        // 1. Status Chart (Pie)
+        new Chart(document.getElementById('chart-status'), {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(statusMap),
+                datasets: [{
+                    data: Object.values(statusMap),
+                    backgroundColor: ['#6c757d', '#007bff', '#17a2b8', '#fd7e14', '#ffc107', '#6f42c1', '#20c997', '#28a745', '#dc3545'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'right' } }
+            }
+        });
+
+        // 2. Priority Chart (Bar)
+        const priorityOrder = ['Low', 'Medium', 'High', 'Critical'];
+        const priorityData = priorityOrder.map(label => priorityMap[label] || 0);
+        new Chart(document.getElementById('chart-priority'), {
+            type: 'bar',
+            data: {
+                labels: priorityOrder,
+                datasets: [{
+                    label: 'Observations Count',
+                    data: priorityData,
+                    backgroundColor: ['#28a745', '#ffc107', '#fd7e14', '#dc3545'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+            }
+        });
+
+        // 3. Department Chart (Bar)
+        new Chart(document.getElementById('chart-dept'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(deptMap),
+                datasets: [{
+                    label: 'Observations Count',
+                    data: Object.values(deptMap),
+                    backgroundColor: '#17a2b8',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+            }
+        });
+
+        // 4. Zone Chart (Horizontal Bar)
+        new Chart(document.getElementById('chart-zone'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(zoneMap),
+                datasets: [{
+                    label: 'Observations Count',
+                    data: Object.values(zoneMap),
+                    backgroundColor: '#007bff',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+            }
+        });
+    }
+</script>
+</body>
+</html>

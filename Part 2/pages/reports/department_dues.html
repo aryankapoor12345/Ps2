@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Department Dues - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Safety Observations By Department</h2>
+                <button onclick="window.print()" class="plain-link-button" style="background:#28a745;">Print Report</button>
+            </div>
+            
+            <table class="data-table" cellpadding="4" cellspacing="0" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>Department</th>
+                        <th width="20%">Total Reported</th>
+                        <th width="20%">Total Pending</th>
+                        <th width="20%">Total Closed</th>
+                    </tr>
+                </thead>
+                <tbody id="dept-dues-body">
+                    <tr><td colspan="4" align="center">Calculating department statistics...</td></tr>
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { generateSummaryReports } from '/firebase/reports.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        await loadDeptDues();
+    }).catch(err => {
+        console.error("Department dues report failed:", err);
+    });
+
+    async function loadDeptDues() {
+        const body = document.getElementById('dept-dues-body');
+        const data = await generateSummaryReports();
+        const deptReport = data.departmentReport;
+        
+        const sortedDepts = Object.keys(deptReport).sort();
+        if (sortedDepts.length === 0) {
+            body.innerHTML = `<tr><td colspan="4" align="center" style="font-style:italic; color:#666;">No department records found.</td></tr>`;
+            return;
+        }
+        
+        let html = '';
+        sortedDepts.forEach(dName => {
+            const row = deptReport[dName];
+            html += `
+                <tr>
+                    <td><strong>${dName}</strong></td>
+                    <td>${row.total}</td>
+                    <td style="color:#d9534f; font-weight:bold;">${row.pending}</td>
+                    <td style="color:#5cb85c; font-weight:bold;">${row.closed}</td>
+                </tr>
+            `;
+        });
+        body.innerHTML = html;
+    }
+</script>
+</body>
+</html>

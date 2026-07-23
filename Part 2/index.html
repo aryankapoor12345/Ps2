@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Redirecting - NTPC Safety Portal</title>
+</head>
+<body>
+    <p style="text-align: center; font-family: sans-serif; margin-top: 100px; color: #666;">
+        Redirecting, please wait...
+    </p>
+    <script type="module">
+        import { initAuthCheck } from '/firebase/auth.js';
+        
+        initAuthCheck().then(user => {
+            if (user) {
+                window.location.href = '/dashboard.html';
+            } else {
+                window.location.href = '/login.html';
+            }
+        }).catch(err => {
+            console.error("Auth check failed:", err);
+            window.location.href = '/login.html';
+        });
+    </script>
+</body>
+</html>

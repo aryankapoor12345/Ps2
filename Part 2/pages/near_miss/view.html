@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Near Miss View - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+    <style>
+        .attachment-thumbnail { display: inline-block; margin-top: 10px; margin-right: 10px; border: 1px solid #eaeaea; padding: 5px; border-radius: 4px; background: #fff; text-decoration: none; color: #0056b3; font-size: 12px; }
+        .attachment-thumbnail img { display: block; max-width: 150px; max-height: 100px; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Near Miss Incident Details</h2>
+                <a href="/pages/near_miss/list.html" class="plain-link-button" style="background:#6c757d;">Back to List</a>
+            </div>
+            
+            <table class="form-table" style="width:100%; border:1px solid #eaeaea;" cellpadding="6" cellspacing="0">
+                <tr>
+                    <td class="label-cell" width="20%">Report ID</td>
+                    <td><strong id="nm-no">--</strong></td>
+                    <td class="label-cell" width="20%">Status</td>
+                    <td id="nm-status">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Reported By</td>
+                    <td id="nm-reporter">--</td>
+                    <td class="label-cell">Incident Date</td>
+                    <td id="nm-date">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Safety Zone</td>
+                    <td id="nm-zone">--</td>
+                    <td class="label-cell">Department</td>
+                    <td id="nm-dept">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Incident Location</td>
+                    <td colspan="3" id="nm-location">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Incident Description</td>
+                    <td colspan="3" id="nm-desc" style="white-space:pre-wrap;">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Possible Consequence</td>
+                    <td colspan="3" id="nm-consequence" style="white-space:pre-wrap;">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Immediate Preventive Action</td>
+                    <td colspan="3" id="nm-preventive" style="white-space:pre-wrap;">--</td>
+                </tr>
+                <tr id="nm-file-row" style="display:none;">
+                    <td class="label-cell">Uploaded Document/Photo</td>
+                    <td colspan="3" id="nm-file-container"></td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { getStatusBadge, formatDate } from '/firebase/utils.js';
+
+    let reportId = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        const params = new URLSearchParams(window.location.search);
+        reportId = params.get('id');
+        if (!reportId) {
+            alert("No report ID specified.");
+            window.location.href = '/pages/near_miss/list.html';
+            return;
+        }
+
+        await loadNearMissDetails();
+    }).catch(err => {
+        console.error("View near miss init error:", err);
+    });
+
+    async function loadNearMissDetails() {
+        try {
+            const docRef = doc(db, 'near_miss_reports', reportId);
+            const docSnap = await getDoc(docRef);
+            
+            if (!docSnap.exists()) {
+                alert("Near miss record not found.");
+                window.location.href = '/pages/near_miss/list.html';
+                return;
+            }
+            
+            const nm = docSnap.data();
+            
+            document.getElementById('nm-no').innerText = nm.near_miss_no;
+            document.getElementById('nm-status').innerHTML = getStatusBadge(nm.status_name || 'Reported');
+            document.getElementById('nm-reporter').innerText = `${nm.reported_by_employee_id} - ${nm.reported_by_name}`;
+            document.getElementById('nm-date').innerText = formatDate(nm.incident_date) + (nm.incident_time ? ` ${nm.incident_time}` : '');
+            document.getElementById('nm-zone').innerText = nm.zone_name || 'N/A';
+            document.getElementById('nm-dept').innerText = nm.department_name || 'N/A';
+            document.getElementById('nm-location').innerText = nm.incident_location;
+            document.getElementById('nm-desc').innerText = nm.incident_description;
+            document.getElementById('nm-consequence').innerText = nm.possible_consequence || 'None specified';
+            document.getElementById('nm-preventive').innerText = nm.preventive_action || 'None specified';
+            
+            // Show attachment file
+            const fileRow = document.getElementById('nm-file-row');
+            const fileContainer = document.getElementById('nm-file-container');
+            
+            if (nm.attachment_path) {
+                const path = nm.attachment_path;
+                const name = path.split('/').pop().split('?')[0].substring(13); // Strip timestamp prefix
+                const isImg = /\.(jpg|jpeg|png)$/i.test(name) || path.includes('alt=media');
+                
+                fileContainer.innerHTML = `
+                    <a href="${path}" target="_blank" class="attachment-thumbnail">
+                        ${isImg ? `<img src="${path}" alt="document">` : ''}
+                        <span>${name}</span>
+                    </a>
+                `;
+                fileRow.style.display = '';
+            } else {
+                fileRow.style.display = 'none';
+            }
+        } catch (e) {
+            console.error("Error fetching near miss details:", e);
+            alert("Error: " + e.message);
+        }
+    }
+</script>
+</body>
+</html>

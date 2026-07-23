@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safety Suggestions - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 id="list-title">Safety Suggestions</h2>
+                <a href="/pages/suggestions/create.html" class="plain-link-button">+ Submit New Suggestion</a>
+            </div>
+            
+            <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th width="15%">Suggestion No</th>
+                        <th>Suggestion Title</th>
+                        <th width="20%">Zone / Department</th>
+                        <th width="15%">Submitted Date</th>
+                        <th width="15%">Status</th>
+                        <th width="10%">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="suggestions-list-body">
+                    <tr><td colspan="6" align="center">Loading suggestions...</td></tr>
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { collection, query, where, orderBy, getDocs } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { getStatusBadge, formatDate } from '/firebase/utils.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        await loadSuggestionsList(user);
+    }).catch(err => {
+        console.error("Suggestions list load error:", err);
+    });
+
+    async function loadSuggestionsList(user) {
+        const body = document.getElementById('suggestions-list-body');
+        const role = user.role;
+        const sugRef = collection(db, 'safety_suggestions');
+        
+        let q;
+        if (role === 'ADMIN' || role === 'SAFETY_ADMIN') {
+            q = query(sugRef, orderBy('created_at', 'desc'));
+        } else {
+            q = query(sugRef, where('submitted_by', '==', user.uid || user.id), orderBy('created_at', 'desc'));
+        }
+
+        try {
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                body.innerHTML = `<tr><td colspan="6" align="center" style="color:#777; font-style:italic;">No safety suggestions found.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            snapshot.docs.forEach(docSnap => {
+                const sug = docSnap.data();
+                html += `
+                    <tr>
+                        <td><strong>${sug.suggestion_no}</strong></td>
+                        <td>${sug.suggestion_title}</td>
+                        <td>
+                            ${sug.zone_name || 'N/A'}<br>
+                            <span style="font-size:11px; color:#666;">Dept: ${sug.department_name || 'N/A'}</span>
+                        </td>
+                        <td>${formatDate(sug.submitted_date)}</td>
+                        <td>${getStatusBadge(sug.status_name || 'Reported')}</td>
+                        <td>
+                            <a href="/pages/suggestions/view.html?id=${docSnap.id}" class="plain-link-button">View</a>
+                        </td>
+                    </tr>
+                `;
+            });
+            body.innerHTML = html;
+        } catch (e) {
+            console.error("Error listing suggestions:", e);
+            body.innerHTML = `<tr><td colspan="6" align="center" style="color:red;">Failed to retrieve records: ${e.message}</td></tr>`;
+        }
+    }
+</script>
+</body>
+</html>

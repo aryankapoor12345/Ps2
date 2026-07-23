@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safety Suggestion View - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+    <style>
+        .attachment-thumbnail { display: inline-block; margin-top: 10px; margin-right: 10px; border: 1px solid #eaeaea; padding: 5px; border-radius: 4px; background: #fff; text-decoration: none; color: #0056b3; font-size: 12px; }
+        .attachment-thumbnail img { display: block; max-width: 150px; max-height: 100px; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Safety Suggestion Details</h2>
+                <a href="/pages/suggestions/list.html" class="plain-link-button" style="background:#6c757d;">Back to List</a>
+            </div>
+            
+            <table class="form-table" style="width:100%; border:1px solid #eaeaea;" cellpadding="6" cellspacing="0">
+                <tr>
+                    <td class="label-cell" width="20%">Suggestion No</td>
+                    <td><strong id="sug-no">--</strong></td>
+                    <td class="label-cell" width="20%">Status</td>
+                    <td id="sug-status">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Submitted By</td>
+                    <td id="sug-submitter">--</td>
+                    <td class="label-cell">Submitted Date</td>
+                    <td id="sug-date">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Safety Zone</td>
+                    <td id="sug-zone">--</td>
+                    <td class="label-cell">Department</td>
+                    <td id="sug-dept">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Suggestion Title</td>
+                    <td colspan="3" id="sug-title" style="font-weight:bold;">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Suggestion Description</td>
+                    <td colspan="3" id="sug-desc" style="white-space:pre-wrap;">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Expected Safety Benefits</td>
+                    <td colspan="3" id="sug-benefits" style="white-space:pre-wrap;">--</td>
+                </tr>
+                <tr id="sug-file-row" style="display:none;">
+                    <td class="label-cell">Uploaded Document</td>
+                    <td colspan="3" id="sug-file-container"></td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { getStatusBadge, formatDate } from '/firebase/utils.js';
+
+    let suggestionId = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        const params = new URLSearchParams(window.location.search);
+        suggestionId = params.get('id');
+        if (!suggestionId) {
+            alert("No suggestion ID specified.");
+            window.location.href = '/pages/suggestions/list.html';
+            return;
+        }
+
+        await loadSuggestionDetails();
+    }).catch(err => {
+        console.error("View suggestion init error:", err);
+    });
+
+    async function loadSuggestionDetails() {
+        try {
+            const docRef = doc(db, 'safety_suggestions', suggestionId);
+            const docSnap = await getDoc(docRef);
+            
+            if (!docSnap.exists()) {
+                alert("Suggestion record not found.");
+                window.location.href = '/pages/suggestions/list.html';
+                return;
+            }
+            
+            const sug = docSnap.data();
+            
+            document.getElementById('sug-no').innerText = sug.suggestion_no;
+            document.getElementById('sug-status').innerHTML = getStatusBadge(sug.status_name || 'Reported');
+            document.getElementById('sug-submitter').innerText = `${sug.submitted_by_employee_id} - ${sug.submitted_by_name}`;
+            document.getElementById('sug-date').innerText = formatDate(sug.submitted_date);
+            document.getElementById('sug-zone').innerText = sug.zone_name || 'N/A';
+            document.getElementById('sug-dept').innerText = sug.department_name || 'N/A';
+            document.getElementById('sug-title').innerText = sug.suggestion_title;
+            document.getElementById('sug-desc').innerText = sug.suggestion_description;
+            document.getElementById('sug-benefits').innerText = sug.expected_benefit || 'None specified';
+            
+            // Show attachment file
+            const fileRow = document.getElementById('sug-file-row');
+            const fileContainer = document.getElementById('sug-file-container');
+            
+            if (sug.attachment_path) {
+                const path = sug.attachment_path;
+                const name = path.split('/').pop().split('?')[0].substring(13); // Strip timestamp prefix
+                const isImg = /\.(jpg|jpeg|png)$/i.test(name) || path.includes('alt=media');
+                
+                fileContainer.innerHTML = `
+                    <a href="${path}" target="_blank" class="attachment-thumbnail">
+                        ${isImg ? `<img src="${path}" alt="document">` : ''}
+                        <span>${name}</span>
+                    </a>
+                `;
+                fileRow.style.display = '';
+            } else {
+                fileRow.style.display = 'none';
+            }
+        } catch (e) {
+            console.error("Error fetching suggestion details:", e);
+            alert("Error: " + e.message);
+        }
+    }
+</script>
+</body>
+</html>

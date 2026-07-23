@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Export CSV - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <h2>Export Database Records to CSV</h2>
+            <p class="info-txt">Select a category below to generate and download a consolidated Excel/CSV file containing all historical records:</p>
+            
+            <table class="form-table" style="max-width:600px; margin-top:20px;" cellpadding="8" cellspacing="0">
+                <tr>
+                    <td class="label-cell" width="40%">Safety Observations</td>
+                    <td>
+                        <button id="export-obs-btn" class="save-button" style="background:#28a745;">Download CSV</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Safety Suggestions</td>
+                    <td>
+                        <button id="export-sug-btn" class="save-button" style="background:#28a745;">Download CSV</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Near Miss Reports</td>
+                    <td>
+                        <button id="export-nm-btn" class="save-button" style="background:#28a745;">Download CSV</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>&nbsp;</td>
+                    <td>
+                        <a href="/dashboard.html" class="plain-link-button" style="background:#6c757d;">Back to Dashboard</a>
+                    </td>
+                </tr>
+            </table>
+            
+            <div id="export-console" style="margin-top:20px; font-size:12px; color:#555; font-style:italic;"></div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { exportToCSV } from '/firebase/reports.js';
+    import { formatDate } from '/firebase/utils.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+    }).catch(err => {
+        console.error("Export page init failed:", err);
+    });
+
+    const consoleDiv = document.getElementById('export-console');
+    function log(msg) {
+        consoleDiv.innerText = msg;
+    }
+
+    // 1. Export Observations
+    document.getElementById('export-obs-btn').onclick = async () => {
+        log("Querying safety observations from Firestore...");
+        try {
+            const snap = await getDocs(query(collection(db, 'safety_observations'), orderBy('created_at', 'desc')));
+            const rows = snap.docs.map(docSnap => {
+                const data = docSnap.data();
+                return [
+                    data.observation_no,
+                    data.status_name,
+                    data.recorded_by_name,
+                    formatDate(data.observation_date),
+                    data.zone_short_name || data.zone_code,
+                    data.department_name,
+                    data.specific_area_location,
+                    data.risk_level || data.priority,
+                    data.accident_type,
+                    data.observation_description,
+                    data.immediate_action || '',
+                    data.recommended_action || '',
+                    data.assigned_agency_name || '',
+                    data.target_closing_date || '',
+                    data.closed_date || ''
+                ];
+            });
+            
+            const headers = [
+                "Observation ID", "Status", "Reported By", "Date", "Safety Zone", 
+                "Department", "Specific Area/Location", "Risk/Priority", "Accident Type", 
+                "Description", "Immediate Action", "Recommended Action", "Assigned Agency", 
+                "Target Date", "Closed Date"
+            ];
+            
+            exportToCSV(`safety_observations_${Date.now()}.csv`, headers, rows);
+            log("✔ Safety observations CSV downloaded successfully.");
+        } catch (e) {
+            log("✘ Export failed: " + e.message);
+        }
+    };
+
+    // 2. Export Suggestions
+    document.getElementById('export-sug-btn').onclick = async () => {
+        log("Querying safety suggestions from Firestore...");
+        try {
+            const snap = await getDocs(query(collection(db, 'safety_suggestions'), orderBy('created_at', 'desc')));
+            const rows = snap.docs.map(docSnap => {
+                const data = docSnap.data();
+                return [
+                    data.suggestion_no,
+                    data.status_name,
+                    `${data.submitted_by_employee_id} ${data.submitted_by_name}`,
+                    formatDate(data.submitted_date),
+                    data.zone_name || '',
+                    data.department_name || '',
+                    data.suggestion_title,
+                    data.suggestion_description,
+                    data.expected_benefit || ''
+                ];
+            });
+            
+            const headers = [
+                "Suggestion ID", "Status", "Submitted By", "Date", "Safety Zone", 
+                "Department", "Title", "Description", "Expected Benefits"
+            ];
+            
+            exportToCSV(`safety_suggestions_${Date.now()}.csv`, headers, rows);
+            log("✔ Safety suggestions CSV downloaded successfully.");
+        } catch (e) {
+            log("✘ Export failed: " + e.message);
+        }
+    };
+
+    // 3. Export Near Miss Reports
+    document.getElementById('export-nm-btn').onclick = async () => {
+        log("Querying near miss reports from Firestore...");
+        try {
+            const snap = await getDocs(query(collection(db, 'near_miss_reports'), orderBy('created_at', 'desc')));
+            const rows = snap.docs.map(docSnap => {
+                const data = docSnap.data();
+                return [
+                    data.near_miss_no,
+                    data.status_name,
+                    `${data.reported_by_employee_id} ${data.reported_by_name}`,
+                    formatDate(data.incident_date),
+                    data.incident_time || '',
+                    data.zone_name,
+                    data.department_name,
+                    data.incident_location,
+                    data.incident_description,
+                    data.possible_consequence || '',
+                    data.preventive_action || ''
+                ];
+            });
+            
+            const headers = [
+                "Near Miss ID", "Status", "Reported By", "Date", "Time", 
+                "Safety Zone", "Department", "Specific Location", "Description", 
+                "Possible Consequences", "Preventive Actions"
+            ];
+            
+            exportToCSV(`near_miss_reports_${Date.now()}.csv`, headers, rows);
+            log("✔ Near miss reports CSV downloaded successfully.");
+        } catch (e) {
+            log("✘ Export failed: " + e.message);
+        }
+    };
+</script>
+</body>
+</html>

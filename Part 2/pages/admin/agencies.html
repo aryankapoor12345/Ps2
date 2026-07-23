@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agencies Administration - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div id="flash-message" class="flash" style="display:none; margin-bottom:15px;"></div>
+
+            <!-- Form Container -->
+            <div id="form-container" style="display:none; margin-bottom:25px;">
+                <h2 id="form-title">Add Agency Contractor</h2>
+                <form id="agency-form" class="validate-form">
+                    <table class="form-table" cellpadding="4" cellspacing="0">
+                        <tr>
+                            <td class="label-cell" width="30%">Agency Code <span class="required">*</span></td>
+                            <td><input type="text" id="agency-code" name="agency_code" class="text-input" placeholder="e.g. BHEL" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Agency Name <span class="required">*</span></td>
+                            <td><input type="text" id="agency-name" name="agency_name" class="long-input" placeholder="e.g. Bharat Heavy Electricals Ltd." required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Contact Person</td>
+                            <td><input type="text" id="agency-contact" name="contact_person" class="long-input" placeholder="e.g. Amit Kumar"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Mobile</td>
+                            <td><input type="text" id="agency-mobile" name="mobile" class="text-input" placeholder="e.g. +91 9999999999"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Email</td>
+                            <td><input type="email" id="agency-email" name="email" class="long-input" placeholder="e.g. safety@bhel.com"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Description</td>
+                            <td><textarea id="agency-desc" name="description" rows="3" placeholder="Brief details about scope..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Active</td>
+                            <td><input type="checkbox" id="agency-active" name="is_active" value="1" checked></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td>
+                                <input type="submit" value="Save Agency" class="save-button" id="submit-btn">
+                                <a href="/pages/admin/agencies.html" class="plain-link-button" style="background:#6c757d; margin-left:10px;">Back</a>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+
+            <!-- List Container -->
+            <div id="list-container">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>Agencies / Contractors Administration</h2>
+                    <a href="?action=add" class="plain-link-button">+ Add New Agency</a>
+                </div>
+                
+                <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th width="15%">Agency Code</th>
+                            <th>Agency Name</th>
+                            <th>Contact Person / Mobile</th>
+                            <th width="15%">Status</th>
+                            <th width="15%">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agencies-list-body">
+                        <tr><td colspan="5" align="center">Loading agencies...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { 
+        collection, doc, getDoc, getDocs, setDoc, updateDoc, 
+        query, orderBy, serverTimestamp 
+    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { logAudit } from '/firebase/firestore.js';
+
+    let currentUser = null;
+    let editId = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        // Process routing
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        editId = params.get('id');
+
+        if (action === 'add' || action === 'edit') {
+            document.getElementById('list-container').style.display = 'none';
+            document.getElementById('form-container').style.display = 'block';
+            if (action === 'edit' && editId) {
+                document.getElementById('form-title').innerText = "Edit Agency Settings";
+                await loadAgencyDetails(editId);
+            } else {
+                document.getElementById('form-title').innerText = "Add Agency Contractor";
+            }
+        } else {
+            await loadAgenciesList();
+        }
+    }).catch(err => {
+        console.error("Agencies init failed:", err);
+    });
+
+    async function loadAgencyDetails(id) {
+        const docRef = doc(db, 'agencies', id);
+        const snapshot = await getDoc(docRef);
+        if (!snapshot.exists()) {
+            alert("Agency not found.");
+            window.location.href = '/pages/admin/agencies.html';
+            return;
+        }
+        const a = snapshot.data();
+        
+        document.getElementById('agency-code').value = a.agency_code || '';
+        document.getElementById('agency-name').value = a.agency_name || '';
+        document.getElementById('agency-contact').value = a.contact_person || '';
+        document.getElementById('agency-mobile').value = a.mobile || '';
+        document.getElementById('agency-email').value = a.email || '';
+        document.getElementById('agency-desc').value = a.description || '';
+        document.getElementById('agency-active').checked = a.is_active;
+        
+        // In edit mode, disable changing the document ID (agency code) directly
+        document.getElementById('agency-code').disabled = true;
+    }
+
+    async function loadAgenciesList() {
+        const listBody = document.getElementById('agencies-list-body');
+        try {
+            const q = query(collection(db, 'agencies'), orderBy('agency_name', 'asc'));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                listBody.innerHTML = `<tr><td colspan="5" align="center" style="font-style:italic;">No agency records found in Firestore.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            snapshot.docs.forEach(docSnap => {
+                const a = docSnap.data();
+                const aId = docSnap.id;
+                const statusBadge = a.is_active 
+                    ? '<span class="status-badge badge-green">Active</span>' 
+                    : '<span class="status-badge badge-red">Inactive</span>';
+
+                html += `
+                    <tr>
+                        <td><strong>${a.agency_code}</strong></td>
+                        <td>${a.agency_name}</td>
+                        <td>
+                            ${a.contact_person || 'N/A'}<br>
+                            <span style="font-size:11px; color:#666;">Mobile: ${a.mobile || 'N/A'} | Email: ${a.email || 'N/A'}</span>
+                        </td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="?action=edit&id=${aId}" class="plain-link-button" style="font-size:11px; padding:2px 6px;">Edit</a>
+                            <button class="plain-link-button toggle-status-btn" data-id="${aId}" data-active="${a.is_active ? 1 : 0}" style="font-size:11px; padding:2px 6px; background:#e0a800; border:none; color:white; cursor:pointer; margin-left:5px;">Toggle</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            listBody.innerHTML = html;
+
+            // Attach toggle status listeners
+            listBody.querySelectorAll('.toggle-status-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const aId = btn.getAttribute('data-id');
+                    const isActive = btn.getAttribute('data-active') === '1';
+                    if (confirm(`Are you sure you want to ${isActive ? 'deactivate' : 'activate'} this Agency?`)) {
+                        await updateDoc(doc(db, 'agencies', aId), {
+                            is_active: !isActive,
+                            updated_at: serverTimestamp()
+                        });
+                        await logAudit(currentUser.uid || currentUser.id, `Toggled active status of agency: ${aId}`, 'agencies', aId);
+                        showFlash("Agency status updated.");
+                        await loadAgenciesList();
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.error("Error fetching agencies list:", e);
+            listBody.innerHTML = `<tr><td colspan="5" align="center" style="color:red;">Error loading agencies: ${e.message}</td></tr>`;
+        }
+    }
+
+    const form = document.getElementById('agency-form');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.value = "Saving agency settings...";
+        
+        const code = document.getElementById('agency-code').value.trim().toUpperCase();
+        const name = document.getElementById('agency-name').value.trim();
+        const contact = document.getElementById('agency-contact').value.trim();
+        const mobile = document.getElementById('agency-mobile').value.trim();
+        const email = document.getElementById('agency-email').value.trim();
+        const desc = document.getElementById('agency-desc').value.trim();
+        const is_active = document.getElementById('agency-active').checked;
+
+        try {
+            if (editId) {
+                // Edit mode
+                const docRef = doc(db, 'agencies', editId);
+                await updateDoc(docRef, {
+                    agency_name: name,
+                    contact_person: contact || null,
+                    mobile: mobile || null,
+                    email: email || null,
+                    description: desc || null,
+                    is_active: is_active,
+                    updated_at: serverTimestamp()
+                });
+                await logAudit(currentUser.uid || currentUser.id, `Edited Agency Contractor: ${editId}`, 'agencies', editId);
+            } else {
+                // Add mode
+                const docRef = doc(db, 'agencies', code);
+                
+                // Double check uniqueness
+                const check = await getDoc(docRef);
+                if (check.exists()) {
+                    alert(`Agency Code "${code}" already exists.`);
+                    resetSubmitBtn();
+                    return;
+                }
+
+                await setDoc(docRef, {
+                    agency_code: code,
+                    agency_name: name,
+                    contact_person: contact || null,
+                    mobile: mobile || null,
+                    email: email || null,
+                    description: desc || null,
+                    is_active: is_active,
+                    created_at: serverTimestamp()
+                });
+                await logAudit(currentUser.uid || currentUser.id, `Added Agency Contractor: ${code}`, 'agencies', code);
+            }
+            
+            alert("Agency saved successfully.");
+            window.location.href = '/pages/admin/agencies.html';
+        } catch (err) {
+            console.error("Save agency failed:", err);
+            alert("Save failed: " + err.message);
+            resetSubmitBtn();
+        }
+    });
+
+    function resetSubmitBtn() {
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.value = "Save Agency";
+    }
+
+    function showFlash(msg) {
+        const flash = document.getElementById('flash-message');
+        flash.innerText = msg;
+        flash.className = "flash flash-success";
+        flash.style.display = 'block';
+        setTimeout(() => {
+            flash.style.display = 'none';
+        }, 5000);
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Get current user document
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Get current user details safely
+    function getUserData() {
+      return getUserDoc().data;
+    }
+
+    // Check user roles
+    function isAdmin() {
+      return isAuthenticated() && 
+        (getUserData().role == 'ADMIN' || getUserData().role == 'SAFETY_ADMIN');
+    }
+
+    // Rules for users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Rules for static departments collection
+    match /departments/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Rules for safety zones
+    match /zones/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Rules for observation categories
+    match /observation_categories/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Rules for observation statuses
+    match /observation_statuses/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Rules for agencies
+    match /agencies/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Rules for settings
+    match /app_settings/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Rules for safety observations (role-based restrictions)
+    match /safety_observations/{id} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.reported_by == request.auth.uid ||
+        resource.data.eic_id == request.auth.uid ||
+        (getUserData().role == 'ZONE_LEADER' && resource.data.zone_id in getUserData().zone_ids) ||
+        (getUserData().role == 'SUB_LEADER' && resource.data.zone_id in getUserData().zone_ids) ||
+        (getUserData().role == 'AGENCY' && resource.data.assigned_agency_id == getUserData().agency_id)
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.reported_by == request.auth.uid ||
+        resource.data.eic_id == request.auth.uid ||
+        (getUserData().role == 'ZONE_LEADER' && resource.data.zone_id in getUserData().zone_ids) ||
+        (getUserData().role == 'SUB_LEADER' && resource.data.zone_id in getUserData().zone_ids) ||
+        (getUserData().role == 'AGENCY' && resource.data.assigned_agency_id == getUserData().agency_id)
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Rules for agency assignments
+    match /agency_assignments/{id} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for attachments
+    match /attachments/{id} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for workflow transitions log
+    match /workflow_history/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Rules for safety suggestions
+    match /safety_suggestions/{id} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for near-miss reports
+    match /near_miss_reports/{id} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for notifications
+    match /notifications/{id} {
+      allow read, update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+
+    // Rules for security audit logs
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+    }
+  }
+}

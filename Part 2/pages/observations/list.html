@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safety Observations List - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 id="list-title">Safety Observations</h2>
+                <div id="create-btn-container"></div>
+            </div>
+            
+            <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th width="15%">Observation ID</th>
+                        <th>Details / Location</th>
+                        <th width="12%">Risk Level</th>
+                        <th width="15%">Reported Date</th>
+                        <th width="18%">Status</th>
+                        <th width="10%">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="observations-list-body">
+                    <tr><td colspan="6" align="center">Loading safety records...</td></tr>
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { fetchObservationsForUser } from '/firebase/dashboard.js';
+    import { getStatusBadge, getPriorityBadge, formatDate } from '/firebase/utils.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        // Title and creation button based on role
+        const title = document.getElementById('list-title');
+        const btnContainer = document.getElementById('create-btn-container');
+        
+        if (user.role === 'USER') {
+            title.innerText = "My Reported Observations";
+            btnContainer.innerHTML = `<a href="/pages/observations/create.html" class="plain-link-button">+ Report New Observation</a>`;
+        } else if (user.role === 'AGENCY') {
+            title.innerText = "Assigned Safety Remediation Jobs";
+        } else if (user.role === 'EIC') {
+            title.innerText = "My EIC Assignment Items";
+        } else {
+            title.innerText = "Safety Observations List";
+        }
+
+        await loadObservationsList(user);
+    }).catch(err => {
+        console.error("List page load error:", err);
+    });
+
+    async function loadObservationsList(user) {
+        const body = document.getElementById('observations-list-body');
+        const list = await fetchObservationsForUser(user);
+        
+        if (list.length === 0) {
+            body.innerHTML = `<tr><td colspan="6" align="center" style="color:#777; font-style:italic;">No observation records found.</td></tr>`;
+            return;
+        }
+        
+        let html = '';
+        list.forEach(obs => {
+            const priority = obs.priority || obs.risk_level || 'Medium';
+            html += `
+                <tr>
+                    <td><strong>${obs.observation_no}</strong></td>
+                    <td>
+                        <strong>${obs.department_name || ''}</strong> - ${obs.specific_area_location || ''}
+                        <div style="font-size:11px; color:#666; margin-top:2px;">
+                            Zone: ${obs.zone_short_name || obs.zone_code || ''} | Reported By: ${obs.recorded_by_name || ''}
+                        </div>
+                    </td>
+                    <td>${getPriorityBadge(priority)}</td>
+                    <td>${formatDate(obs.observation_date)}</td>
+                    <td>${getStatusBadge(obs.status_name)}</td>
+                    <td>
+                        <a href="/pages/observations/view.html?id=${obs.id}" class="plain-link-button">View</a>
+                    </td>
+                </tr>
+            `;
+        });
+        body.innerHTML = html;
+    }
+</script>
+</body>
+</html>

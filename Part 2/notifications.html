@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>My Alerts & Notifications</h2>
+                <button id="mark-all-read-btn" class="plain-link-button" style="background:#28a745; font-size:12px; display:none;">Mark All as Read</button>
+            </div>
+            
+            <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th width="20%">Topic</th>
+                        <th>Message</th>
+                        <th width="20%">Received Date</th>
+                        <th width="15%">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="notif-list-body">
+                    <tr><td colspan="4" align="center">Loading notifications...</td></tr>
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { getNotificationsHistory, markAsRead } from '/firebase/notifications.js';
+    import { formatDateTime } from '/firebase/utils.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        await loadNotifications(user.uid || user.id);
+    }).catch(err => {
+        console.error("Notifications list error:", err);
+    });
+
+    async function loadNotifications(userId) {
+        const listBody = document.getElementById('notif-list-body');
+        const list = await getNotificationsHistory(userId, 50);
+        
+        if (list.length === 0) {
+            listBody.innerHTML = `<tr><td colspan="4" align="center" style="color:#777; font-style:italic;">No notifications found.</td></tr>`;
+            document.getElementById('mark-all-read-btn').style.display = 'none';
+            return;
+        }
+        
+        let hasUnread = false;
+        let html = '';
+        list.forEach(n => {
+            if (!n.is_read) hasUnread = true;
+            const rowStyle = n.is_read ? 'color:#666;' : 'font-weight:bold; background-color:#f1f7ff;';
+            const readStatusBadge = n.is_read ? '' : '<span style="color:#007bff; font-size:10px; margin-left:5px;">● New</span>';
+            
+            // Generate link based on related doc type
+            let link = '#';
+            if (n.related_type === 'observation') {
+                link = `/pages/observations/view.html?id=${n.related_id}`;
+            } else if (n.related_type === 'suggestion') {
+                link = `/pages/suggestions/view.html?id=${n.related_id}`;
+            } else if (n.related_type === 'near_miss') {
+                link = `/pages/near_miss/view.html?id=${n.related_id}`;
+            }
+            
+            html += `
+                <tr style="${rowStyle}" class="notif-row" data-id="${n.id}" data-is-read="${n.is_read}">
+                    <td>${n.title}${readStatusBadge}</td>
+                    <td>${n.message}</td>
+                    <td>${formatDateTime(n.created_at)}</td>
+                    <td>
+                        <a href="${link}" class="plain-link-button link-view-btn" data-id="${n.id}">View Details</a>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        listBody.innerHTML = html;
+        
+        // Show/hide mark all read button
+        const markAllBtn = document.getElementById('mark-all-read-btn');
+        if (hasUnread) {
+            markAllBtn.style.display = 'block';
+        } else {
+            markAllBtn.style.display = 'none';
+        }
+        
+        // Attach click listener to mark read when clicking "View details"
+        const btns = listBody.querySelectorAll('.link-view-btn');
+        btns.forEach(b => {
+            b.addEventListener('click', async (e) => {
+                const nId = b.getAttribute('data-id');
+                const row = b.closest('.notif-row');
+                if (row.getAttribute('data-is-read') === 'false') {
+                    await markAsRead(nId);
+                }
+            });
+        });
+        
+        // Mark all as read button handler
+        markAllBtn.onclick = async () => {
+            markAllBtn.disabled = true;
+            const unreadRows = listBody.querySelectorAll('tr[data-is-read="false"]');
+            for (const row of unreadRows) {
+                const nId = row.getAttribute('data-id');
+                await markAsRead(nId);
+            }
+            alert("All notifications marked as read.");
+            await loadNotifications(userId);
+        };
+    }
+</script>
+</body>
+</html>

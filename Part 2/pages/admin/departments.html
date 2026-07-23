@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Departments Administration - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div id="flash-message" class="flash" style="display:none; margin-bottom:15px;"></div>
+
+            <!-- Form Container -->
+            <div id="form-container" style="display:none; margin-bottom:25px;">
+                <h2 id="form-title">Add Department</h2>
+                <form id="dept-form" class="validate-form">
+                    <table class="form-table" cellpadding="4" cellspacing="0">
+                        <tr>
+                            <td class="label-cell" width="30%">Department Name <span class="required">*</span></td>
+                            <td><input type="text" id="dept-name" name="department_name" class="long-input" placeholder="e.g. Mechanical" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Department Code <span class="required">*</span></td>
+                            <td><input type="text" id="dept-code" name="department_code" class="text-input" placeholder="e.g. MECH" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Active</td>
+                            <td><input type="checkbox" id="dept-active" name="is_active" value="1" checked></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td>
+                                <input type="submit" value="Save Department" class="save-button" id="submit-btn">
+                                <a href="/pages/admin/departments.html" class="plain-link-button" style="background:#6c757d; margin-left:10px;">Back</a>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+
+            <!-- List Container -->
+            <div id="list-container">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>Departments Administration</h2>
+                    <a href="?action=add" class="plain-link-button">+ Add New Department</a>
+                </div>
+                
+                <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th width="20%">Dept Code</th>
+                            <th>Department Name</th>
+                            <th width="20%">Status</th>
+                            <th width="20%">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="depts-list-body">
+                        <tr><td colspan="4" align="center">Loading departments...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { 
+        collection, doc, getDoc, getDocs, setDoc, updateDoc, 
+        query, orderBy, serverTimestamp 
+    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { logAudit } from '/firebase/firestore.js';
+
+    let currentUser = null;
+    let editId = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        // Process routing
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        editId = params.get('id');
+
+        if (action === 'add' || action === 'edit') {
+            document.getElementById('list-container').style.display = 'none';
+            document.getElementById('form-container').style.display = 'block';
+            if (action === 'edit' && editId) {
+                document.getElementById('form-title').innerText = "Edit Department Settings";
+                await loadDeptDetails(editId);
+            } else {
+                document.getElementById('form-title').innerText = "Add Department";
+            }
+        } else {
+            await loadDeptsList();
+        }
+    }).catch(err => {
+        console.error("Departments init failed:", err);
+    });
+
+    async function loadDeptDetails(id) {
+        const docRef = doc(db, 'departments', id);
+        const snapshot = await getDoc(docRef);
+        if (!snapshot.exists()) {
+            alert("Department not found.");
+            window.location.href = '/pages/admin/departments.html';
+            return;
+        }
+        const d = snapshot.data();
+        
+        document.getElementById('dept-name').value = d.department_name || '';
+        document.getElementById('dept-code').value = d.department_code || '';
+        document.getElementById('dept-active').checked = d.is_active;
+        
+        // In edit mode, disable changing the document ID (department name) directly
+        document.getElementById('dept-name').disabled = true;
+    }
+
+    async function loadDeptsList() {
+        const listBody = document.getElementById('depts-list-body');
+        try {
+            const q = query(collection(db, 'departments'), orderBy('department_name', 'asc'));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                listBody.innerHTML = `<tr><td colspan="4" align="center" style="font-style:italic;">No department records found in Firestore.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            snapshot.docs.forEach(docSnap => {
+                const d = docSnap.data();
+                const dId = docSnap.id;
+                const statusBadge = d.is_active 
+                    ? '<span class="status-badge badge-green">Active</span>' 
+                    : '<span class="status-badge badge-red">Inactive</span>';
+
+                html += `
+                    <tr>
+                        <td><strong>${d.department_code}</strong></td>
+                        <td>${d.department_name}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="?action=edit&id=${dId}" class="plain-link-button" style="font-size:11px; padding:2px 6px;">Edit</a>
+                            <button class="plain-link-button toggle-status-btn" data-id="${dId}" data-active="${d.is_active ? 1 : 0}" style="font-size:11px; padding:2px 6px; background:#e0a800; border:none; color:white; cursor:pointer; margin-left:5px;">Toggle</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            listBody.innerHTML = html;
+
+            // Attach toggle status listeners
+            listBody.querySelectorAll('.toggle-status-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const dId = btn.getAttribute('data-id');
+                    const isActive = btn.getAttribute('data-active') === '1';
+                    if (confirm(`Are you sure you want to ${isActive ? 'deactivate' : 'activate'} this Department?`)) {
+                        await updateDoc(doc(db, 'departments', dId), {
+                            is_active: !isActive,
+                            updated_at: serverTimestamp()
+                        });
+                        await logAudit(currentUser.uid || currentUser.id, `Toggled active status of department: ${dId}`, 'departments', dId);
+                        showFlash("Department status updated.");
+                        await loadDeptsList();
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.error("Error fetching departments list:", e);
+            listBody.innerHTML = `<tr><td colspan="4" align="center" style="color:red;">Error loading departments: ${e.message}</td></tr>`;
+        }
+    }
+
+    const form = document.getElementById('dept-form');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.value = "Saving department settings...";
+        
+        const name = document.getElementById('dept-name').value.trim();
+        const code = document.getElementById('dept-code').value.trim().toUpperCase();
+        const is_active = document.getElementById('dept-active').checked;
+
+        // Use name as document ID to avoid duplicates (e.g. Mechanical, Electrical)
+        const docId = name.replace(/[^a-zA-Z0-9]/g, '_');
+
+        try {
+            if (editId) {
+                // Edit mode
+                const docRef = doc(db, 'departments', editId);
+                await updateDoc(docRef, {
+                    department_code: code,
+                    is_active: is_active,
+                    updated_at: serverTimestamp()
+                });
+                await logAudit(currentUser.uid || currentUser.id, `Edited Department: ${editId}`, 'departments', editId);
+            } else {
+                // Add mode
+                const docRef = doc(db, 'departments', docId);
+                
+                // Double check uniqueness
+                const check = await getDoc(docRef);
+                if (check.exists()) {
+                    alert(`Department Name "${name}" already exists.`);
+                    resetSubmitBtn();
+                    return;
+                }
+
+                await setDoc(docRef, {
+                    department_name: name,
+                    department_code: code,
+                    is_active: is_active,
+                    created_at: serverTimestamp()
+                });
+                await logAudit(currentUser.uid || currentUser.id, `Added Department: ${name}`, 'departments', docId);
+            }
+            
+            alert("Department saved successfully.");
+            window.location.href = '/pages/admin/departments.html';
+        } catch (err) {
+            console.error("Save department failed:", err);
+            alert("Save failed: " + err.message);
+            resetSubmitBtn();
+        }
+    });
+
+    function resetSubmitBtn() {
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.value = "Save Department";
+    }
+
+    function showFlash(msg) {
+        const flash = document.getElementById('flash-message');
+        flash.innerText = msg;
+        flash.className = "flash flash-success";
+        flash.style.display = 'block';
+        setTimeout(() => {
+            flash.style.display = 'none';
+        }, 5000);
+    }
+</script>
+</body>
+</html>

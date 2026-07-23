@@ -1,0 +1,148 @@
+.form-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #9eb6c8;
+}
+
+.form-table td {
+    border: 1px solid #c8dce8;
+    padding: 5px;
+}
+
+.form-table tr:nth-child(odd) {
+    background: #eef7fc;
+}
+
+.form-table tr:nth-child(even) {
+    background: #ffffff;
+}
+
+.label-cell {
+    width: 210px;
+    font-weight: bold;
+    color: #003366;
+}
+
+.text-input,
+.date-input,
+.time-input,
+select,
+textarea {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12px;
+    border: 1px solid #777777;
+    background: #ffffff;
+    padding: 2px;
+}
+
+.text-input {
+    width: 240px;
+}
+
+.long-input {
+    width: 420px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12px;
+    border: 1px solid #777777;
+    background: #ffffff;
+    padding: 2px;
+}
+
+.date-input,
+.time-input {
+    width: 110px;
+}
+
+select {
+    width: 250px;
+}
+
+textarea {
+    width: 420px;
+    height: 80px;
+}
+
+.save-button,
+.plain-button {
+    border: 1px solid #555555;
+    background: #e6e6e6;
+    color: #000000;
+    padding: 3px 12px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.save-button:hover,
+.plain-button:hover {
+    background: #d7e8f4;
+}
+
+.plain-link-button {
+    display: inline-block;
+    border: 1px solid #555555;
+    background: #e6e6e6;
+    color: #000000;
+    padding: 3px 12px;
+    font-size: 12px;
+    text-decoration: none;
+}
+
+.plain-link-button:hover {
+    background: #d7e8f4;
+}
+
+.btn,
+.btn-small,
+.btn-danger,
+.btn-secondary {
+    display: inline-block;
+    border: 1px solid #555555;
+    background: #e6e6e6;
+    color: #000000;
+    padding: 3px 10px;
+    font-size: 12px;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.btn-small {
+    padding: 2px 7px;
+    font-size: 11px;
+}
+
+.btn-danger {
+    background: #f1dddd;
+}
+
+.btn-secondary {
+    background: #eeeeee;
+}
+
+.required {
+    color: #990000;
+}
+
+.char-count {
+    font-size: 11px;
+    color: #555555;
+}
+
+.readonly-box {
+    min-height: 18px;
+    width: 420px;
+    border: 1px solid #999999;
+    background: #f9f9f9;
+    padding: 3px;
+}
+
+.observation-form-table {
+    max-width: 900px;
+}
+
+.filter-table {
+    margin-bottom: 10px;
+}
+
+.login-form-table .label-cell {
+    width: 120px;
+}

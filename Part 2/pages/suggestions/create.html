@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Record Suggestion - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <h2>Record Suggestion</h2>
+            
+            <div id="error-container" class="flash flash-error" style="display:none;"></div>
+            
+            <form id="create-sug-form" enctype="multipart/form-data" class="validate-form">
+                <table class="form-table" cellpadding="4" cellspacing="0" style="width:100%;">
+                    <tr>
+                        <td class="label-cell" width="25%">Submitted By</td>
+                        <td id="sug-submitter">--</td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Safety Zone</td>
+                        <td>
+                            <select name="zone_id" id="sug-zone">
+                                <option value="">--Select Safety Zone--</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Department</td>
+                        <td>
+                            <select name="department_id" id="sug-dept">
+                                <option value="">--Select Department--</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Suggestion Title <span class="required">*</span></td>
+                        <td><input type="text" name="suggestion_title" class="long-input" placeholder="Enter suggestion topic" required></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Suggestion Description <span class="required">*</span></td>
+                        <td><textarea name="suggestion_description" rows="5" required minlength="10" placeholder="Enter detailed description of your suggestion..."></textarea></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Expected Benefit</td>
+                        <td><textarea name="expected_benefit" rows="3" placeholder="Describe the expected safety benefits..."></textarea></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Submitted Date <span class="required">*</span></td>
+                        <td><input type="date" name="submitted_date" id="sug-date" class="date-input" required></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Upload Document (Max 2MB)</td>
+                        <td><input type="file" name="attachment" id="sug-file"></td>
+                    </tr>
+                    <tr>
+                        <td>&nbsp;</td>
+                        <td>
+                            <input type="submit" value="Save Suggestion" class="save-button" id="submit-btn">
+                            <a href="/dashboard.html" class="plain-link-button" style="background:#6c757d; margin-left:10px;">Cancel</a>
+                        </td>
+                    </tr>
+                </table>
+            </form>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { getAllZones, getAllDepartments, logAudit } from '/firebase/firestore.js';
+    import { generateSuggestionNo } from '/firebase/utils.js';
+    import { uploadFile } from '/firebase/storage.js';
+    import { db } from '/firebase/firebase.js';
+    import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+    let currentUser = null;
+    let zoneList = [];
+    let deptList = [];
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        document.getElementById('sug-submitter').innerText = `${user.employee_id} - ${user.full_name}`;
+        document.getElementById('sug-date').value = new Date().toISOString().split('T')[0];
+        
+        zoneList = await getAllZones();
+        deptList = await getAllDepartments();
+        
+        const zoneSelect = document.getElementById('sug-zone');
+        zoneList.forEach(z => {
+            zoneSelect.innerHTML += `<option value="${z.id}">${z.zone_name}</option>`;
+        });
+        
+        const deptSelect = document.getElementById('sug-dept');
+        deptList.forEach(d => {
+            deptSelect.innerHTML += `<option value="${d.id}">${d.department_name}</option>`;
+        });
+    }).catch(err => {
+        console.error("Create suggestion init failed:", err);
+    });
+
+    // Form Submit
+    const form = document.getElementById('create-sug-form');
+    const errContainer = document.getElementById('error-container');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errContainer.style.display = 'none';
+        
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.value = "Saving Suggestion...";
+        
+        const fileInput = document.getElementById('sug-file');
+        const file = fileInput.files[0];
+        
+        let attachmentPath = null;
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) {
+                showError("File size exceeds 2MB limit.");
+                resetSubmitBtn();
+                return;
+            }
+            const uploadRes = await uploadFile(file, 'suggestions');
+            if (uploadRes.success) {
+                attachmentPath = uploadRes.path;
+            } else {
+                showError("File upload failed: " + uploadRes.message);
+                resetSubmitBtn();
+                return;
+            }
+        }
+        
+        try {
+            const zoneObj = zoneList.find(z => z.id === form.zone_id.value);
+            const deptObj = deptList.find(d => d.id === form.department_id.value);
+            const sugNo = await generateSuggestionNo();
+            
+            const docData = {
+                suggestion_no: sugNo,
+                submitted_by: currentUser.uid || currentUser.id,
+                submitted_by_name: currentUser.full_name,
+                submitted_by_employee_id: currentUser.employee_id,
+                zone_id: form.zone_id.value || null,
+                zone_name: zoneObj ? zoneObj.zone_name : null,
+                department_id: form.department_id.value || null,
+                department_name: deptObj ? deptObj.department_name : null,
+                suggestion_title: form.suggestion_title.value.trim(),
+                suggestion_description: form.suggestion_description.value.trim(),
+                expected_benefit: form.expected_benefit.value.trim() || null,
+                submitted_date: form.submitted_date.value,
+                attachment_path: attachmentPath,
+                status_name: 'Reported',
+                created_at: serverTimestamp()
+            };
+            
+            const docRef = await addDoc(collection(db, 'safety_suggestions'), docData);
+            
+            await logAudit(currentUser.uid || currentUser.id, `Recorded safety suggestion ${sugNo}`, 'safety_suggestions', docRef.id);
+            alert(`Safety suggestion recorded successfully! ID: ${sugNo}`);
+            window.location.href = `/pages/suggestions/view.html?id=${docRef.id}`;
+        } catch (err) {
+            console.error("Save suggestion failed:", err);
+            showError("Save failed: " + err.message);
+            resetSubmitBtn();
+        }
+    });
+
+    function resetSubmitBtn() {
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.value = "Save Suggestion";
+    }
+
+    function showError(msg) {
+        errContainer.innerText = msg;
+        errContainer.style.display = 'block';
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Categories Administration - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div id="flash-message" class="flash" style="display:none; margin-bottom:15px;"></div>
+
+            <!-- Form Container -->
+            <div id="form-container" style="display:none; margin-bottom:25px;">
+                <h2 id="form-title">Add Category</h2>
+                <form id="cat-form" class="validate-form">
+                    <table class="form-table" cellpadding="4" cellspacing="0">
+                        <tr>
+                            <td class="label-cell" width="30%">Category Name <span class="required">*</span></td>
+                            <td><input type="text" id="cat-name" name="category_name" class="long-input" placeholder="e.g. Unsafe Act" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Description</td>
+                            <td><textarea id="cat-desc" name="description" rows="3" placeholder="Enter brief details..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Active</td>
+                            <td><input type="checkbox" id="cat-active" name="is_active" value="1" checked></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td>
+                                <input type="submit" value="Save Category" class="save-button" id="submit-btn">
+                                <a href="/pages/admin/categories.html" class="plain-link-button" style="background:#6c757d; margin-left:10px;">Back</a>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+
+            <!-- List Container -->
+            <div id="list-container">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>Observation Categories Administration</h2>
+                    <a href="?action=add" class="plain-link-button">+ Add New Category</a>
+                </div>
+                
+                <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Category Name</th>
+                            <th>Description</th>
+                            <th width="20%">Status</th>
+                            <th width="20%">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cats-list-body">
+                        <tr><td colspan="4" align="center">Loading categories...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { 
+        collection, doc, getDoc, getDocs, setDoc, updateDoc, 
+        query, orderBy, serverTimestamp 
+    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { logAudit } from '/firebase/firestore.js';
+
+    let currentUser = null;
+    let editId = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        // Process routing
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        editId = params.get('id');
+
+        if (action === 'add' || action === 'edit') {
+            document.getElementById('list-container').style.display = 'none';
+            document.getElementById('form-container').style.display = 'block';
+            if (action === 'edit' && editId) {
+                document.getElementById('form-title').innerText = "Edit Category Settings";
+                await loadCategoryDetails(editId);
+            } else {
+                document.getElementById('form-title').innerText = "Add Category";
+            }
+        } else {
+            await loadCategoriesList();
+        }
+    }).catch(err => {
+        console.error("Categories init failed:", err);
+    });
+
+    async function loadCategoryDetails(id) {
+        const docRef = doc(db, 'observation_categories', id);
+        const snapshot = await getDoc(docRef);
+        if (!snapshot.exists()) {
+            alert("Category not found.");
+            window.location.href = '/pages/admin/categories.html';
+            return;
+        }
+        const c = snapshot.data();
+        
+        document.getElementById('cat-name').value = c.category_name || '';
+        document.getElementById('cat-desc').value = c.description || '';
+        document.getElementById('cat-active').checked = c.is_active;
+        
+        // In edit mode, disable changing the document ID (category name) directly
+        document.getElementById('cat-name').disabled = true;
+    }
+
+    async function loadCategoriesList() {
+        const listBody = document.getElementById('cats-list-body');
+        try {
+            const q = query(collection(db, 'observation_categories'), orderBy('category_name', 'asc'));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                listBody.innerHTML = `<tr><td colspan="4" align="center" style="font-style:italic;">No category records found in Firestore.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            snapshot.docs.forEach(docSnap => {
+                const c = docSnap.data();
+                const cId = docSnap.id;
+                const statusBadge = c.is_active 
+                    ? '<span class="status-badge badge-green">Active</span>' 
+                    : '<span class="status-badge badge-red">Inactive</span>';
+
+                html += `
+                    <tr>
+                        <td><strong>${c.category_name}</strong></td>
+                        <td>${c.description || 'None'}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="?action=edit&id=${cId}" class="plain-link-button" style="font-size:11px; padding:2px 6px;">Edit</a>
+                            <button class="plain-link-button toggle-status-btn" data-id="${cId}" data-active="${c.is_active ? 1 : 0}" style="font-size:11px; padding:2px 6px; background:#e0a800; border:none; color:white; cursor:pointer; margin-left:5px;">Toggle</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            listBody.innerHTML = html;
+
+            // Attach toggle status listeners
+            listBody.querySelectorAll('.toggle-status-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const cId = btn.getAttribute('data-id');
+                    const isActive = btn.getAttribute('data-active') === '1';
+                    if (confirm(`Are you sure you want to ${isActive ? 'deactivate' : 'activate'} this Category?`)) {
+                        await updateDoc(doc(db, 'observation_categories', cId), {
+                            is_active: !isActive,
+                            updated_at: serverTimestamp()
+                        });
+                        await logAudit(currentUser.uid || currentUser.id, `Toggled active status of category: ${cId}`, 'observation_categories', cId);
+                        showFlash("Category status updated.");
+                        await loadCategoriesList();
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.error("Error fetching categories list:", e);
+            listBody.innerHTML = `<tr><td colspan="4" align="center" style="color:red;">Error loading categories: ${e.message}</td></tr>`;
+        }
+    }
+
+    const form = document.getElementById('cat-form');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.value = "Saving category settings...";
+        
+        const name = document.getElementById('cat-name').value.trim();
+        const desc = document.getElementById('cat-desc').value.trim();
+        const is_active = document.getElementById('cat-active').checked;
+
+        // Use name as document ID to avoid duplicates
+        const docId = name.replace(/[^a-zA-Z0-9]/g, '_');
+
+        try {
+            if (editId) {
+                // Edit mode
+                const docRef = doc(db, 'observation_categories', editId);
+                await updateDoc(docRef, {
+                    description: desc || null,
+                    is_active: is_active,
+                    updated_at: serverTimestamp()
+                });
+                await logAudit(currentUser.uid || currentUser.id, `Edited Safety Category: ${editId}`, 'observation_categories', editId);
+            } else {
+                // Add mode
+                const docRef = doc(db, 'observation_categories', docId);
+                
+                // Double check uniqueness
+                const check = await getDoc(docRef);
+                if (check.exists()) {
+                    alert(`Category Name "${name}" already exists.`);
+                    resetSubmitBtn();
+                    return;
+                }
+
+                await setDoc(docRef, {
+                    category_name: name,
+                    description: desc || null,
+                    is_active: is_active,
+                    created_at: serverTimestamp()
+                });
+                await logAudit(currentUser.uid || currentUser.id, `Added Safety Category: ${name}`, 'observation_categories', docId);
+            }
+            
+            alert("Safety Category saved successfully.");
+            window.location.href = '/pages/admin/categories.html';
+        } catch (err) {
+            console.error("Save category failed:", err);
+            alert("Save failed: " + err.message);
+            resetSubmitBtn();
+        }
+    });
+
+    function resetSubmitBtn() {
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.value = "Save Category";
+    }
+
+    function showFlash(msg) {
+        const flash = document.getElementById('flash-message');
+        flash.innerText = msg;
+        flash.className = "flash flash-success";
+        flash.style.display = 'block';
+        setTimeout(() => {
+            flash.style.display = 'none';
+        }, 5000);
+    }
+</script>
+</body>
+</html>

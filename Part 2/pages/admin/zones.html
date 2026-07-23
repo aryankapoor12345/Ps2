@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zones Administration - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div id="flash-message" class="flash" style="display:none; margin-bottom:15px;"></div>
+
+            <!-- Form Container -->
+            <div id="form-container" style="display:none; margin-bottom:25px;">
+                <h2 id="form-title">Add Safety Zone</h2>
+                <form id="zone-form" class="validate-form">
+                    <table class="form-table" cellpadding="4" cellspacing="0">
+                        <tr>
+                            <td class="label-cell" width="30%">Zone Code <span class="required">*</span></td>
+                            <td><input type="text" id="zone-code" name="zone_code" class="text-input" placeholder="e.g. ZONE-19" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Zone Full Name <span class="required">*</span></td>
+                            <td><input type="text" id="zone-name" name="zone_name" class="long-input" placeholder="Full descriptive name" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Short Name <span class="required">*</span></td>
+                            <td><input type="text" id="zone-short" name="short_name" class="long-input" placeholder="e.g. ZONE-19 (Auxiliary)" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Display Order</td>
+                            <td><input type="number" id="zone-order" name="display_order" class="text-input" style="width:100px;" value="0"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Description</td>
+                            <td><textarea id="zone-desc" name="description" rows="3" placeholder="Enter brief details..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Active</td>
+                            <td><input type="checkbox" id="zone-active" name="is_active" value="1" checked></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td>
+                                <input type="submit" value="Save Zone" class="save-button" id="submit-btn">
+                                <a href="/pages/admin/zones.html" class="plain-link-button" style="background:#6c757d; margin-left:10px;">Back</a>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+
+            <!-- List Container -->
+            <div id="list-container">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>Safety Zones Administration</h2>
+                    <a href="?action=add" class="plain-link-button">+ Add New Zone</a>
+                </div>
+                
+                <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th width="15%">Zone Code</th>
+                            <th>Short Name / Full Name</th>
+                            <th width="15%">Display Order</th>
+                            <th width="15%">Status</th>
+                            <th width="15%">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="zones-list-body">
+                        <tr><td colspan="5" align="center">Loading safety zones...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { 
+        collection, doc, getDoc, getDocs, setDoc, updateDoc, 
+        query, orderBy, serverTimestamp 
+    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { logAudit } from '/firebase/firestore.js';
+
+    let currentUser = null;
+    let editId = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        // Process routing
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        editId = params.get('id');
+
+        if (action === 'add' || action === 'edit') {
+            document.getElementById('list-container').style.display = 'none';
+            document.getElementById('form-container').style.display = 'block';
+            if (action === 'edit' && editId) {
+                document.getElementById('form-title').innerText = "Edit Safety Zone";
+                await loadZoneDetails(editId);
+            } else {
+                document.getElementById('form-title').innerText = "Add Safety Zone";
+            }
+        } else {
+            await loadZonesList();
+        }
+    }).catch(err => {
+        console.error("Zones init failed:", err);
+    });
+
+    async function loadZoneDetails(id) {
+        const docRef = doc(db, 'zones', id);
+        const snapshot = await getDoc(docRef);
+        if (!snapshot.exists()) {
+            alert("Zone not found.");
+            window.location.href = '/pages/admin/zones.html';
+            return;
+        }
+        const z = snapshot.data();
+        
+        document.getElementById('zone-code').value = z.zone_code || '';
+        document.getElementById('zone-name').value = z.zone_name || '';
+        document.getElementById('zone-short').value = z.short_name || '';
+        document.getElementById('zone-order').value = z.display_order || 0;
+        document.getElementById('zone-desc').value = z.description || '';
+        document.getElementById('zone-active').checked = z.is_active;
+        
+        // In edit mode, disable changing the document ID (zone code) directly
+        document.getElementById('zone-code').disabled = true;
+    }
+
+    async function loadZonesList() {
+        const listBody = document.getElementById('zones-list-body');
+        try {
+            const q = query(collection(db, 'zones'), orderBy('display_order', 'asc'));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                listBody.innerHTML = `<tr><td colspan="5" align="center" style="font-style:italic;">No zone records found in Firestore.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            snapshot.docs.forEach(docSnap => {
+                const z = docSnap.data();
+                const zId = docSnap.id;
+                const statusBadge = z.is_active 
+                    ? '<span class="status-badge badge-green">Active</span>' 
+                    : '<span class="status-badge badge-red">Inactive</span>';
+
+                html += `
+                    <tr>
+                        <td><strong>${z.zone_code}</strong></td>
+                        <td>
+                            <strong>${z.short_name || ''}</strong><br>
+                            <span style="font-size:11px; color:#666;">${z.zone_name || ''}</span>
+                        </td>
+                        <td>${z.display_order || 0}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="?action=edit&id=${zId}" class="plain-link-button" style="font-size:11px; padding:2px 6px;">Edit</a>
+                            <button class="plain-link-button toggle-status-btn" data-id="${zId}" data-active="${z.is_active ? 1 : 0}" style="font-size:11px; padding:2px 6px; background:#e0a800; border:none; color:white; cursor:pointer; margin-left:5px;">Toggle</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            listBody.innerHTML = html;
+
+            // Attach toggle status listeners
+            listBody.querySelectorAll('.toggle-status-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const zId = btn.getAttribute('data-id');
+                    const isActive = btn.getAttribute('data-active') === '1';
+                    if (confirm(`Are you sure you want to ${isActive ? 'deactivate' : 'activate'} this Safety Zone?`)) {
+                        await updateDoc(doc(db, 'zones', zId), {
+                            is_active: !isActive,
+                            updated_at: serverTimestamp()
+                        });
+                        await logAudit(currentUser.uid || currentUser.id, `Toggled active status of zone: ${zId}`, 'zones', zId);
+                        showFlash("Zone status updated.");
+                        await loadZonesList();
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.error("Error fetching zones list:", e);
+            listBody.innerHTML = `<tr><td colspan="5" align="center" style="color:red;">Error loading zones: ${e.message}</td></tr>`;
+        }
+    }
+
+    const form = document.getElementById('zone-form');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.value = "Saving zone settings...";
+        
+        const code = document.getElementById('zone-code').value.trim().toUpperCase();
+        const name = document.getElementById('zone-name').value.trim();
+        const short = document.getElementById('zone-short').value.trim();
+        const order = parseInt(document.getElementById('zone-order').value || 0);
+        const desc = document.getElementById('zone-desc').value.trim();
+        const is_active = document.getElementById('zone-active').checked;
+
+        try {
+            if (editId) {
+                // Edit mode
+                const docRef = doc(db, 'zones', editId);
+                await updateDoc(docRef, {
+                    zone_name: name,
+                    short_name: short,
+                    display_order: order,
+                    description: desc || null,
+                    is_active: is_active,
+                    updated_at: serverTimestamp()
+                });
+                await logAudit(currentUser.uid || currentUser.id, `Edited Safety Zone: ${editId}`, 'zones', editId);
+            } else {
+                // Add mode
+                const docRef = doc(db, 'zones', code);
+                
+                // Double check uniqueness
+                const check = await getDoc(docRef);
+                if (check.exists()) {
+                    alert(`Zone Code "${code}" already exists.`);
+                    resetSubmitBtn();
+                    return;
+                }
+
+                await setDoc(docRef, {
+                    zone_code: code,
+                    zone_name: name,
+                    short_name: short,
+                    display_order: order,
+                    description: desc || null,
+                    is_active: is_active,
+                    created_at: serverTimestamp()
+                });
+                await logAudit(currentUser.uid || currentUser.id, `Added Safety Zone: ${code}`, 'zones', code);
+            }
+            
+            alert("Safety Zone saved successfully.");
+            window.location.href = '/pages/admin/zones.html';
+        } catch (err) {
+            console.error("Save zone failed:", err);
+            alert("Save failed: " + err.message);
+            resetSubmitBtn();
+        }
+    });
+
+    function resetSubmitBtn() {
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.value = "Save Zone";
+    }
+
+    function showFlash(msg) {
+        const flash = document.getElementById('flash-message');
+        flash.innerText = msg;
+        flash.className = "flash flash-success";
+        flash.style.display = 'block';
+        setTimeout(() => {
+            flash.style.display = 'none';
+        }, 5000);
+    }
+</script>
+</body>
+</html>

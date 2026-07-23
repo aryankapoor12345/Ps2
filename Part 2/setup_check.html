@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnostics & Setup - NTPC Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f7f9fa; color: #333; margin: 40px; }
+        .setup-container { max-width: 850px; margin: 30px auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.06); }
+        h1 { color: #0056b3; border-bottom: 2px solid #eaeaea; padding-bottom: 10px; margin-bottom: 20px; }
+        h2 { font-size: 18px; color: #333; margin-top: 25px; }
+        .status-badge-custom { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+        .badge-green { background-color: #d4edda; color: #155724; }
+        .badge-red { background-color: #f8d7da; color: #721c24; }
+        .badge-yellow { background-color: #fff3cd; color: #856404; }
+        .console-box { background: #1e1e1e; color: #39ff14; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 13px; height: 180px; overflow-y: auto; margin-top: 15px; border: 1px solid #333; }
+        .info-txt { font-size: 13px; color: #666; margin-bottom: 15px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+<div class="setup-container">
+    <h1>Firebase Diagnostics & Setup Checker</h1>
+    <p class="info-txt">
+        This diagnostic checker validates your client-side environment settings, Firebase API configuration, and connection to the database. Use the forms below to configure your Firebase Project and seed default collections.
+    </p>
+
+    <h2>1. Environment Status</h2>
+    <table class="dashboard-count-table" style="width:100%; border:1px solid #eaeaea; margin-bottom:20px;" cellpadding="8" cellspacing="0">
+        <tr style="background:#f8f9fa;">
+            <th align="left" style="border-bottom:1px solid #eaeaea;">Parameter Checked</th>
+            <th align="left" style="border-bottom:1px solid #eaeaea;">Status</th>
+            <th align="left" style="border-bottom:1px solid #eaeaea;">Details</th>
+        </tr>
+        <tr>
+            <td style="border-bottom:1px solid #eaeaea;">Local Storage Support</td>
+            <td style="border-bottom:1px solid #eaeaea;" id="status-ls">Checking...</td>
+            <td style="border-bottom:1px solid #eaeaea;">Needed for remembering credentials.</td>
+        </tr>
+        <tr>
+            <td style="border-bottom:1px solid #eaeaea;">Firebase Configuration Configured</td>
+            <td style="border-bottom:1px solid #eaeaea;" id="status-config">Checking...</td>
+            <td style="border-bottom:1px solid #eaeaea;" id="details-config">Checking...</td>
+        </tr>
+        <tr>
+            <td style="border-bottom:1px solid #eaeaea;">Firebase Services Connected</td>
+            <td style="border-bottom:1px solid #eaeaea;" id="status-conn">Checking...</td>
+            <td style="border-bottom:1px solid #eaeaea;" id="details-conn">Checking...</td>
+        </tr>
+    </table>
+
+    <h2>2. Configure Firebase Project</h2>
+    <p class="info-txt">Enter your Firebase Web App configuration credentials (obtained from the Firebase console settings):</p>
+    <form id="config-form">
+        <table class="form-table" style="width:100%;">
+            <tr>
+                <td class="label-cell" width="30%">API Key (apiKey)</td>
+                <td><input type="text" id="api-key" class="text-input" style="width:90%;" required></td>
+            </tr>
+            <tr>
+                <td class="label-cell">Auth Domain (authDomain)</td>
+                <td><input type="text" id="auth-domain" class="text-input" style="width:90%;" required></td>
+            </tr>
+            <tr>
+                <td class="label-cell">Project ID (projectId)</td>
+                <td><input type="text" id="project-id" class="text-input" style="width:90%;" required></td>
+            </tr>
+            <tr>
+                <td class="label-cell">Storage Bucket (storageBucket)</td>
+                <td><input type="text" id="storage-bucket" class="text-input" style="width:90%;" required></td>
+            </tr>
+            <tr>
+                <td class="label-cell">Messaging Sender ID</td>
+                <td><input type="text" id="messaging-id" class="text-input" style="width:90%;" required></td>
+            </tr>
+            <tr>
+                <td class="label-cell">App ID (appId)</td>
+                <td><input type="text" id="app-id" class="text-input" style="width:90%;" required></td>
+            </tr>
+            <tr>
+                <td>&nbsp;</td>
+                <td>
+                    <button type="submit" class="save-button">Save Credentials</button>
+                    <button type="button" id="clear-btn" class="plain-link-button" style="background:#dc3545; color:white; border:none; padding:8px 12px; cursor:pointer;">Clear Configuration</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+
+    <div id="seeder-section" style="display:none;">
+        <h2>3. Database Seeding Tool</h2>
+        <p class="info-txt">Initialize your Cloud Firestore collections with default master records, departments, safety zones, roles, and demo accounts (admin, subleader, zone leaders, EIC, agency contractor, and employees):</p>
+        <button id="seed-btn" class="save-button" style="background:#28a745;">Seed Firebase Database</button>
+        <a href="/login.html" class="plain-link-button" style="margin-left: 10px;">Proceed to Login</a>
+        <div class="console-box" id="console-log">Logs will appear here when database seeding starts...</div>
+    </div>
+</div>
+
+<script type="module">
+    import { db } from '/firebase/firebase.js';
+    import { seedDatabase } from '/js/seed.js';
+
+    // 1. Check local storage
+    const statusLs = document.getElementById('status-ls');
+    try {
+        localStorage.setItem('ls_test', 'ok');
+        localStorage.removeItem('ls_test');
+        statusLs.innerHTML = '<span class="status-badge-custom badge-green">✔ OK</span>';
+    } catch(e) {
+        statusLs.innerHTML = '<span class="status-badge-custom badge-red">✘ Failed</span>';
+    }
+
+    // Load current values
+    document.getElementById('api-key').value = localStorage.getItem('FB_API_KEY') || '';
+    document.getElementById('auth-domain').value = localStorage.getItem('FB_AUTH_DOMAIN') || '';
+    document.getElementById('project-id').value = localStorage.getItem('FB_PROJECT_ID') || '';
+    document.getElementById('storage-bucket').value = localStorage.getItem('FB_STORAGE_BUCKET') || '';
+    document.getElementById('messaging-id').value = localStorage.getItem('FB_MESSAGING_SENDER_ID') || '';
+    document.getElementById('app-id').value = localStorage.getItem('FB_APP_ID') || '';
+
+    // Check Firebase configuration
+    const statusConfig = document.getElementById('status-config');
+    const detailsConfig = document.getElementById('details-config');
+    const apiKey = localStorage.getItem('FB_API_KEY');
+    
+    if (apiKey) {
+        statusConfig.innerHTML = '<span class="status-badge-custom badge-green">✔ OK</span>';
+        detailsConfig.innerText = 'Credentials loaded from LocalStorage.';
+        document.getElementById('seeder-section').style.display = 'block';
+    } else {
+        statusConfig.innerHTML = '<span class="status-badge-custom badge-yellow">⚠ Missing</span>';
+        detailsConfig.innerText = 'Please configure Firebase configuration below.';
+    }
+
+    // Check actual Firestore database connectivity
+    const statusConn = document.getElementById('status-conn');
+    const detailsConn = document.getElementById('details-conn');
+    if (db) {
+        statusConn.innerHTML = '<span class="status-badge-custom badge-green">✔ Connected</span>';
+        detailsConn.innerText = 'Successfully connected to Cloud Firestore SDK.';
+    } else {
+        statusConn.innerHTML = '<span class="status-badge-custom badge-red">✘ Disconnected</span>';
+        detailsConn.innerText = 'Firebase is not initialized or invalid credentials.';
+    }
+
+    // Config form submit
+    document.getElementById('config-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        localStorage.setItem('FB_API_KEY', document.getElementById('api-key').value.trim());
+        localStorage.setItem('FB_AUTH_DOMAIN', document.getElementById('auth-domain').value.trim());
+        localStorage.setItem('FB_PROJECT_ID', document.getElementById('project-id').value.trim());
+        localStorage.setItem('FB_STORAGE_BUCKET', document.getElementById('storage-bucket').value.trim());
+        localStorage.setItem('FB_MESSAGING_SENDER_ID', document.getElementById('messaging-id').value.trim());
+        localStorage.setItem('FB_APP_ID', document.getElementById('app-id').value.trim());
+        alert("Configuration saved. Reloading page to apply...");
+        window.location.reload();
+    });
+
+    // Clear config
+    document.getElementById('clear-btn').addEventListener('click', () => {
+        if (confirm("Are you sure you want to clear your Firebase configurations?")) {
+            localStorage.removeItem('FB_API_KEY');
+            localStorage.removeItem('FB_AUTH_DOMAIN');
+            localStorage.removeItem('FB_PROJECT_ID');
+            localStorage.removeItem('FB_STORAGE_BUCKET');
+            localStorage.removeItem('FB_MESSAGING_SENDER_ID');
+            localStorage.removeItem('FB_APP_ID');
+            alert("Configuration cleared. Reloading...");
+            window.location.reload();
+        }
+    });
+
+    // Seeding trigger
+    const consoleLog = document.getElementById('console-log');
+    function log(msg, color = '#39ff14') {
+        const span = document.createElement('span');
+        span.style.color = color;
+        span.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
+        consoleLog.appendChild(span);
+        consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    document.getElementById('seed-btn').addEventListener('click', async () => {
+        document.getElementById('seed-btn').disabled = true;
+        consoleLog.innerHTML = '';
+        log("Connecting to Cloud Firestore database...", "#00bfff");
+        
+        try {
+            log("Executing seedDatabase script...", "#ffff00");
+            await seedDatabase(db);
+            log("✔ Roles collection seeded successfully.", "#39ff14");
+            log("✔ Departments collection seeded successfully.", "#39ff14");
+            log("✔ Agencies collection seeded successfully.", "#39ff14");
+            log("✔ Safety Zones collection seeded successfully.", "#39ff14");
+            log("✔ Observation Categories collection seeded successfully.", "#39ff14");
+            log("✔ Observation Statuses collection seeded successfully.", "#39ff14");
+            log("✔ App Settings collection seeded successfully.", "#39ff14");
+            log("✔ Default Users collection seeded successfully (admin, subleader, zone leaders, eic, agency_user, bhupendra).", "#39ff14");
+            log("✔ Firestore Database seeding completed successfully!", "#00ff00");
+            log("Notice: You can now log in using 'admin' and password 'password123'. First-time login will automatically register your account in Firebase Auth.", "#ffaa00");
+        } catch (e) {
+            log("✘ Seeding failed: " + e.message, "#dc3545");
+            console.error(e);
+        } finally {
+            document.getElementById('seed-btn').disabled = false;
+        }
+    });
+</script>
+</body>
+</html>

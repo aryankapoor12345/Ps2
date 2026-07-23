@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Record Safety Observations - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <h2>Record Safety Observations</h2>
+            
+            <div id="error-container" class="flash flash-error" style="display:none;"></div>
+            
+            <form id="create-obs-form" enctype="multipart/form-data" class="validate-form">
+                <table class="form-table" cellpadding="4" cellspacing="0" style="width:100%;">
+                    <tr>
+                        <td class="label-cell" width="25%">Reported By</td>
+                        <td id="reporter-name">--</td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Safety Zone <span class="required">*</span></td>
+                        <td>
+                            <select name="zone_id" id="obs-zone" required>
+                                <option value="">--Select Safety Zone--</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Engineer In-Charge (EIC)</td>
+                        <td>
+                            <select name="eic_id" id="obs-eic">
+                                <option value="">--Select EIC (Select Zone First)--</option>
+                            </select>
+                            <span class="info-txt" style="display:block; margin-top:2px;">Mapped EIC will load automatically on selecting Zone.</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Department <span class="required">*</span></td>
+                        <td>
+                            <select name="department_id" id="obs-dept" required>
+                                <option value="">--Select Department--</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Specific Area/Location <span class="required">*</span></td>
+                        <td><input type="text" name="specific_area_location" class="long-input" placeholder="e.g. Boiler floor near oil station" required></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Observation Category <span class="required">*</span></td>
+                        <td>
+                            <select name="category_id" id="obs-category" required>
+                                <option value="">--Select Category--</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Risk Level</td>
+                        <td>
+                            <select name="risk_level">
+                                <option value="Low">Low</option>
+                                <option value="Medium" selected>Medium</option>
+                                <option value="High">High</option>
+                                <option value="Critical">Critical</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Accident Type</td>
+                        <td>
+                            <select name="accident_type">
+                                <option value="None" selected>None</option>
+                                <option value="Near Miss">Near Miss</option>
+                                <option value="Minor">Minor</option>
+                                <option value="Major">Major</option>
+                                <option value="Fatal">Fatal</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Observation Date <span class="required">*</span></td>
+                        <td><input type="date" name="observation_date" id="obs-date" class="date-input" required></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Observation Time</td>
+                        <td><input type="time" name="observation_time" id="obs-time" class="text-input" style="width:150px;"></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Observation Description <span class="required">*</span></td>
+                        <td><textarea name="observation_description" rows="5" required minlength="10" maxlength="2000" placeholder="Describe the safety observation in detail (min 10 characters)..."></textarea></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Immediate Action Taken</td>
+                        <td><textarea name="immediate_action" rows="3" placeholder="Describe any immediate corrective actions taken..."></textarea></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Recommended Action</td>
+                        <td><textarea name="recommended_action" rows="3" placeholder="Recommended long term corrective action..."></textarea></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Upload Photo/Doc (Max 2MB)</td>
+                        <td><input type="file" name="attachment" id="obs-file"></td>
+                    </tr>
+                    <tr>
+                        <td>&nbsp;</td>
+                        <td>
+                            <input type="submit" value="Save Observation" class="save-button" id="submit-btn">
+                            <a href="/dashboard.html" class="plain-link-button" style="background:#6c757d; margin-left:10px;">Cancel</a>
+                        </td>
+                    </tr>
+                </table>
+            </form>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { getAllZones, getAllDepartments, getAllCategories, getZoneEics, logAudit } from '/firebase/firestore.js';
+    import { generateObservationNo } from '/firebase/utils.js';
+    import { uploadFile } from '/firebase/storage.js';
+    import { recordWorkflowAction } from '/firebase/workflow.js';
+    import { db } from '/firebase/firebase.js';
+    import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+    let currentUser = null;
+    let zoneList = [];
+    let deptList = [];
+    let categoryList = [];
+
+    // Initialize page
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        document.getElementById('reporter-name').innerText = `${user.employee_id} - ${user.full_name}`;
+        
+        // Defaults for date/time
+        const now = new Date();
+        document.getElementById('obs-date').value = now.toISOString().split('T')[0];
+        document.getElementById('obs-time').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        
+        // Load configurations
+        zoneList = await getAllZones();
+        deptList = await getAllDepartments();
+        categoryList = await getAllCategories();
+        
+        const zoneSelect = document.getElementById('obs-zone');
+        zoneList.forEach(z => {
+            zoneSelect.innerHTML += `<option value="${z.id}">${z.zone_name}</option>`;
+        });
+        
+        const deptSelect = document.getElementById('obs-dept');
+        deptList.forEach(d => {
+            deptSelect.innerHTML += `<option value="${d.id}">${d.department_name}</option>`;
+        });
+        
+        const categorySelect = document.getElementById('obs-category');
+        categoryList.forEach(c => {
+            categorySelect.innerHTML += `<option value="${c.id}">${c.category_name}</option>`;
+        });
+
+        // Dynamic EIC mapping on Zone selection
+        zoneSelect.addEventListener('change', async () => {
+            const zId = zoneSelect.value;
+            const eicSelect = document.getElementById('obs-eic');
+            eicSelect.innerHTML = `<option value="">--Loading EICs...--</option>`;
+            
+            if (!zId) {
+                eicSelect.innerHTML = `<option value="">--Select EIC (Select Zone First)--</option>`;
+                return;
+            }
+            
+            const eics = await getZoneEics(zId);
+            if (eics.length === 0) {
+                eicSelect.innerHTML = `<option value="">--No EIC mapped to this Zone--</option>`;
+            } else {
+                eicSelect.innerHTML = `<option value="">--Select EIC--</option>`;
+                eics.forEach(e => {
+                    eicSelect.innerHTML += `<option value="${e.id}" selected>${e.full_name}</option>`; // Default preselect EIC
+                });
+            }
+        });
+
+    }).catch(err => {
+        console.error("Create observation page init failed:", err);
+    });
+
+    // Form Submission
+    const form = document.getElementById('create-obs-form');
+    const errContainer = document.getElementById('error-container');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errContainer.style.display = 'none';
+        
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.value = "Saving Observation...";
+        
+        const fileInput = document.getElementById('obs-file');
+        const file = fileInput.files[0];
+        
+        let attachmentPath = null;
+        let attachmentOriginalName = null;
+        
+        // 1. Upload attachment if selected
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) {
+                showError("File size exceeds 2MB limit.");
+                resetSubmitBtn();
+                return;
+            }
+            logAudit(currentUser.uid || currentUser.id, `Uploading attachment: ${file.name}`);
+            const uploadRes = await uploadFile(file, 'observations');
+            if (uploadRes.success) {
+                attachmentPath = uploadRes.path;
+                attachmentOriginalName = uploadRes.original_name;
+            } else {
+                showError("File upload failed: " + uploadRes.message);
+                resetSubmitBtn();
+                return;
+            }
+        }
+        
+        try {
+            // 2. Fetch selected data objects to store dereferenced fields (best practice to avoid queries)
+            const zoneObj = zoneList.find(z => z.id === form.zone_id.value);
+            const deptObj = deptList.find(d => d.id === form.department_id.value);
+            const catObj = categoryList.find(c => c.id === form.category_id.value);
+            
+            const obsNo = await generateObservationNo();
+            
+            const eicSelect = document.getElementById('obs-eic');
+            let eicId = eicSelect.value || null;
+            let eicName = eicSelect.selectedIndex > 0 ? eicSelect.options[eicSelect.selectedIndex].text : null;
+            if (eicName && eicName.startsWith('--')) eicName = null;
+
+            // 3. Write observation to safety_observations collection
+            const docData = {
+                observation_no: obsNo,
+                reported_by: currentUser.uid || currentUser.id,
+                reporter_employee_id: currentUser.employee_id,
+                reporter_name: currentUser.full_name,
+                recorded_by_name: `${currentUser.employee_id} ${currentUser.full_name}`,
+                zone_id: form.zone_id.value,
+                zone_code: zoneObj.zone_code,
+                zone_short_name: zoneObj.short_name,
+                eic_id: eicId,
+                eic_name: eicName,
+                department_id: form.department_id.value,
+                department_name: deptObj.department_name,
+                category_id: form.category_id.value,
+                category_name: catObj.category_name,
+                specific_area_location: form.specific_area_location.value.trim(),
+                observation_description: form.observation_description.value.trim(),
+                immediate_action: form.immediate_action.value.trim() || null,
+                recommended_action: form.recommended_action.value.trim() || null,
+                risk_level: form.risk_level.value,
+                accident_type: form.accident_type.value,
+                observation_date: form.observation_date.value,
+                observation_time: form.observation_time.value || null,
+                attachment_path: attachmentPath,
+                attachment_original_name: attachmentOriginalName,
+                status_name: 'Reported',
+                created_at: serverTimestamp(),
+                updated_at: serverTimestamp()
+            };
+            
+            const newDocRef = await addDoc(collection(db, 'safety_observations'), docData);
+            
+            // 4. Record workflow timeline
+            await recordWorkflowAction(newDocRef.id, currentUser, 'Reported Observation', 'Reported', 'Observation submitted by reporter.');
+            
+            alert(`Observation recorded successfully! No: ${obsNo}`);
+            window.location.href = `/pages/observations/view.html?id=${newDocRef.id}`;
+        } catch (err) {
+            console.error("Save observation error:", err);
+            showError("Save failed: " + err.message);
+            resetSubmitBtn();
+        }
+    });
+
+    function resetSubmitBtn() {
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.value = "Save Observation";
+    }
+
+    function showError(msg) {
+        errContainer.innerText = msg;
+        errContainer.style.display = 'block';
+    }
+</script>
+</body>
+</html>

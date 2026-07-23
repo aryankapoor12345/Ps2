@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Report - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Safety Dashboard Report Summary</h2>
+                <button onclick="window.print()" class="plain-link-button" style="background:#28a745;">Print Report</button>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap; margin-top:20px;">
+                <!-- Status Totals Table -->
+                <div style="flex:1; min-width:300px;">
+                    <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px;">Observations By Status</h3>
+                    <table class="data-table" cellpadding="4" cellspacing="0" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th width="30%">Total Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="status-report-body">
+                            <tr><td colspan="2" align="center">Calculating...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Priority Totals Table -->
+                <div style="flex:1; min-width:300px;">
+                    <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px;">Observations By Risk Level</h3>
+                    <table class="data-table" cellpadding="4" cellspacing="0" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th>Risk/Priority Level</th>
+                                <th width="30%">Total Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="priority-report-body">
+                            <tr><td colspan="2" align="center">Calculating...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Category Totals Table -->
+            <div style="margin-top:30px;">
+                <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px;">Observations By Category</h3>
+                <table class="data-table" cellpadding="4" cellspacing="0" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Safety Category</th>
+                            <th width="30%">Total Count</th>
+                        </tr>
+                    </thead>
+                    <tbody id="category-report-body">
+                        <tr><td colspan="2" align="center">Calculating...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { getReportingData } from '/firebase/reports.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        await generateStats();
+    }).catch(err => {
+        console.error("Dashboard report load failed:", err);
+    });
+
+    async function generateStats() {
+        const list = await getReportingData();
+        
+        let statusCounts = {};
+        let priorityCounts = {};
+        let categoryCounts = {};
+        
+        list.forEach(obs => {
+            const status = obs.status_name || 'Reported';
+            statusCounts[status] = (statusCounts[status] || 0) + 1;
+            
+            const p = obs.priority || obs.risk_level || 'Medium';
+            priorityCounts[p] = (priorityCounts[p] || 0) + 1;
+            
+            const cat = obs.category_name || 'Unspecified';
+            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+        });
+        
+        // 1. Render status counts
+        const statusBody = document.getElementById('status-report-body');
+        let statusHtml = '';
+        Object.keys(statusCounts).sort().forEach(k => {
+            statusHtml += `<tr><td><strong>${k}</strong></td><td>${statusCounts[k]}</td></tr>`;
+        });
+        statusBody.innerHTML = statusHtml || '<tr><td colspan="2" align="center">No data</td></tr>';
+        
+        // 2. Render priority counts
+        const priorityBody = document.getElementById('priority-report-body');
+        let priorityHtml = '';
+        const order = ['Critical', 'High', 'Medium', 'Low'];
+        order.forEach(k => {
+            if (priorityCounts[k]) {
+                priorityHtml += `<tr><td><strong>${k}</strong></td><td>${priorityCounts[k]}</td></tr>`;
+            }
+        });
+        priorityBody.innerHTML = priorityHtml || '<tr><td colspan="2" align="center">No data</td></tr>';
+        
+        // 3. Render category counts
+        const categoryBody = document.getElementById('category-report-body');
+        let categoryHtml = '';
+        Object.keys(categoryCounts).sort().forEach(k => {
+            categoryHtml += `<tr><td><strong>${k}</strong></td><td>${categoryCounts[k]}</td></tr>`;
+        });
+        categoryBody.innerHTML = categoryHtml || '<tr><td colspan="2" align="center">No data</td></tr>';
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global System Settings - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <h2>Global Portal Settings</h2>
+            <p class="info-txt">Configure general application variables stored globally in Cloud Firestore.</p>
+
+            <div id="flash-message" class="flash" style="display:none; margin-bottom:15px;"></div>
+
+            <form id="settings-form" class="validate-form" style="margin-top:20px;">
+                <table class="form-table" cellpadding="6" cellspacing="0" style="max-width:650px;">
+                    <tr>
+                        <td class="label-cell" width="40%">Portal Name / Title <span class="required">*</span></td>
+                        <td><input type="text" id="set-title" name="site_title" class="long-input" required></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Session Inactivity Timeout (Mins) <span class="required">*</span></td>
+                        <td><input type="number" id="set-timeout" name="session_timeout_minutes" class="text-input" style="width:100px;" min="1" max="120" required></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Maximum File Upload Size (MB) <span class="required">*</span></td>
+                        <td><input type="number" id="set-upload" name="max_upload_size_mb" class="text-input" style="width:100px;" min="1" max="20" required></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Safety Administrator Contact Email</td>
+                        <td><input type="email" id="set-email" name="admin_email" class="long-input"></td>
+                    </tr>
+                    <tr>
+                        <td>&nbsp;</td>
+                        <td>
+                            <input type="submit" value="Save System Settings" class="save-button" id="submit-btn">
+                        </td>
+                    </tr>
+                </table>
+            </form>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { logAudit } from '/firebase/firestore.js';
+
+    let currentUser = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        await loadSettings();
+    }).catch(err => {
+        console.error("Settings init failed:", err);
+    });
+
+    async function loadSettings() {
+        const docRef = doc(db, 'app_settings', 'global');
+        try {
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+                const s = snap.data();
+                document.getElementById('set-title').value = s.site_title || 'NTPC Online Safety Portal';
+                document.getElementById('set-timeout').value = s.session_timeout_minutes || 15;
+                document.getElementById('set-upload').value = s.max_upload_size_mb || 2;
+                document.getElementById('set-email').value = s.admin_email || 'safety@ntpc.co.in';
+            }
+        } catch (e) {
+            console.error("Load settings failed:", e);
+        }
+    }
+
+    const form = document.getElementById('settings-form');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.value = "Saving settings...";
+        
+        const title = document.getElementById('set-title').value.trim();
+        const timeout = parseInt(document.getElementById('set-timeout').value || 15);
+        const upload = parseInt(document.getElementById('set-upload').value || 2);
+        const email = document.getElementById('set-email').value.trim();
+
+        try {
+            const docRef = doc(db, 'app_settings', 'global');
+            await setDoc(docRef, {
+                site_title: title,
+                session_timeout_minutes: timeout,
+                max_upload_size_mb: upload,
+                admin_email: email,
+                updated_at: serverTimestamp()
+            });
+            await logAudit(currentUser.uid || currentUser.id, "Updated global system settings in app_settings/global", "app_settings", "global");
+            
+            showFlash("Global system settings saved successfully.");
+        } catch (err) {
+            console.error("Save settings failed:", err);
+            alert("Save failed: " + err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.value = "Save System Settings";
+        }
+    });
+
+    function showFlash(msg) {
+        const flash = document.getElementById('flash-message');
+        flash.innerText = msg;
+        flash.className = "flash flash-success";
+        flash.style.display = 'block';
+        setTimeout(() => {
+            flash.style.display = 'none';
+        }, 5000);
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <h2>User Profile</h2>
+            
+            <table class="form-table" style="max-width:600px; margin-top:20px;" cellpadding="6" cellspacing="0">
+                <tr>
+                    <td class="label-cell" width="35%">Username</td>
+                    <td id="prof-username">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Employee ID</td>
+                    <td id="prof-empid">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Full Name</td>
+                    <td id="prof-name">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Role</td>
+                    <td id="prof-role">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell" id="dept-agency-label">Department</td>
+                    <td id="prof-dept-agency">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Designation</td>
+                    <td id="prof-designation">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Mobile</td>
+                    <td id="prof-mobile">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Email</td>
+                    <td id="prof-email">--</td>
+                </tr>
+                <tr>
+                    <td>&nbsp;</td>
+                    <td>
+                        <a href="/change_password.html" class="plain-link-button">Change Password</a>
+                        <a href="/dashboard.html" class="plain-link-button" style="background:#6c757d; margin-left:10px;">Back</a>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        // Fill profile details
+        document.getElementById('prof-username').innerText = user.username || '';
+        document.getElementById('prof-empid').innerText = user.employee_id || '';
+        document.getElementById('prof-name').innerText = user.full_name || '';
+        document.getElementById('prof-role').innerText = user.role || '';
+        document.getElementById('prof-designation').innerText = user.designation || 'N/A';
+        document.getElementById('prof-mobile').innerText = user.mobile || 'N/A';
+        document.getElementById('prof-email').innerText = user.email || 'N/A';
+        
+        const deptAgencyLabel = document.getElementById('dept-agency-label');
+        const deptAgencyVal = document.getElementById('prof-dept-agency');
+        if (user.role === 'AGENCY') {
+            deptAgencyLabel.innerText = "Agency Code";
+            deptAgencyVal.innerText = user.agency_id || 'N/A';
+        } else {
+            deptAgencyLabel.innerText = "Department";
+            deptAgencyVal.innerText = user.department_id || 'N/A';
+        }
+    }).catch(err => {
+        console.error("Profile load error:", err);
+    });
+</script>
+</body>
+</html>

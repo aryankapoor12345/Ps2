@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Users Administration - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div id="flash-message" class="flash" style="display:none; margin-bottom:15px;"></div>
+
+            <!-- View Form Container -->
+            <div id="form-container" style="display:none; margin-bottom:25px;">
+                <h2 id="form-title">Add User</h2>
+                <form id="user-form" class="validate-form">
+                    <table class="form-table" cellpadding="4" cellspacing="0">
+                        <tr>
+                            <td class="label-cell" width="30%">Employee ID <span class="required">*</span></td>
+                            <td><input type="text" id="user-empid" name="employee_id" class="text-input" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Full Name <span class="required">*</span></td>
+                            <td><input type="text" id="user-name" name="full_name" class="long-input" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Username <span class="required">*</span></td>
+                            <td><input type="text" id="user-username" name="username" class="text-input" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Password <span id="pass-req-star"></span></td>
+                            <td>
+                                <input type="password" id="user-password" name="password" class="text-input">
+                                <span class="info-txt" style="display:block; margin-top:2px;" id="pass-help"></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Role <span class="required">*</span></td>
+                            <td>
+                                <select name="role" id="user-role" required>
+                                    <option value="">Select Role</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr id="department-row">
+                            <td class="label-cell">Department</td>
+                            <td>
+                                <select name="department_id" id="user-dept">
+                                    <option value="">Select Department</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr id="agency-row" style="display:none;">
+                            <td class="label-cell">Agency</td>
+                            <td>
+                                <select name="agency_id" id="user-agency">
+                                    <option value="">Select Agency</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr id="zones-row">
+                            <td class="label-cell">Managed Zones<br><span style="font-size:11px; font-weight:normal; color:#666;">(For Leaders/EICs)</span></td>
+                            <td id="zones-checkbox-container">
+                                <!-- Checkbox list of zones -->
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Designation</td>
+                            <td><input type="text" id="user-designation" name="designation" class="text-input"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Mobile</td>
+                            <td><input type="text" id="user-mobile" name="mobile" class="text-input"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Email</td>
+                            <td><input type="email" id="user-email" name="email" class="long-input"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Active</td>
+                            <td><input type="checkbox" id="user-active" name="is_active" value="1" checked></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td>
+                                <input type="submit" value="Save User" class="save-button" id="submit-btn">
+                                <a href="/pages/admin/users.html" class="plain-link-button" style="background:#6c757d; margin-left:10px;">Back</a>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+
+            <!-- List Container -->
+            <div id="list-container">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>Users Administration</h2>
+                    <a href="?action=add" class="plain-link-button">+ Add New User</a>
+                </div>
+                
+                <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Emp ID</th>
+                            <th>Full Name</th>
+                            <th>Username</th>
+                            <th>Role</th>
+                            <th>Department / Agency</th>
+                            <th>Status</th>
+                            <th width="15%">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-list-body">
+                        <tr><td colspan="7" align="center">Loading users records...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { db } from '/firebase/firebase.js';
+    import { 
+        collection, doc, getDoc, getDocs, setDoc, updateDoc, 
+        query, orderBy, deleteDoc, addDoc, serverTimestamp 
+    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { getAllZones, getAllDepartments, getAllAgencies, logAudit } from '/firebase/firestore.js';
+
+    let currentUser = null;
+    let editId = null;
+    let rolesList = [];
+    let deptList = [];
+    let agencyList = [];
+    let zonesList = [];
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+
+        // Load reference lists
+        deptList = await getAllDepartments();
+        agencyList = await getAllAgencies();
+        zonesList = await getAllZones();
+        
+        // Populate form selectors
+        rolesList = ['ADMIN', 'SAFETY_ADMIN', 'ZONE_LEADER', 'SUB_LEADER', 'EIC', 'AGENCY', 'USER'];
+        const rSelect = document.getElementById('user-role');
+        rolesList.forEach(r => {
+            rSelect.innerHTML += `<option value="${r}">${r}</option>`;
+        });
+        
+        const dSelect = document.getElementById('user-dept');
+        deptList.forEach(d => {
+            dSelect.innerHTML += `<option value="${d.id}">${d.department_name}</option>`;
+        });
+        
+        const aSelect = document.getElementById('user-agency');
+        agencyList.forEach(a => {
+            aSelect.innerHTML += `<option value="${a.id}">${a.agency_name}</option>`;
+        });
+
+        // Load zones checkboxes
+        const zCheckboxContainer = document.getElementById('zones-checkbox-container');
+        zonesList.forEach(z => {
+            zCheckboxContainer.innerHTML += `
+                <div style="display:inline-block; width:45%; margin-bottom:5px;">
+                    <input type="checkbox" name="zone_ids" value="${z.id}" class="zone-chk"> ${z.short_name || z.zone_code}
+                </div>
+            `;
+        });
+
+        // Watch role change to show/hide dynamic fields
+        rSelect.addEventListener('change', toggleDynamicFormFields);
+
+        // Process routing
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        editId = params.get('id');
+
+        if (action === 'add' || action === 'edit') {
+            document.getElementById('list-container').style.display = 'none';
+            document.getElementById('form-container').style.display = 'block';
+            if (action === 'edit' && editId) {
+                document.getElementById('form-title').innerText = "Edit User Settings";
+                await loadUserDetails(editId);
+            } else {
+                document.getElementById('form-title').innerText = "Add New Portal User";
+                document.getElementById('pass-req-star').innerHTML = '<span class="required">*</span>';
+                document.getElementById('pass-help').innerText = "Must be at least 6 characters.";
+                document.getElementById('user-password').required = true;
+            }
+        } else {
+            await loadUsersList();
+        }
+    }).catch(err => {
+        console.error("Users list init failed:", err);
+    });
+
+    function toggleDynamicFormFields() {
+        const role = document.getElementById('user-role').value;
+        const deptRow = document.getElementById('department-row');
+        const agencyRow = document.getElementById('agency-row');
+        const zonesRow = document.getElementById('zones-row');
+        
+        if (role === 'AGENCY') {
+            agencyRow.style.display = '';
+            deptRow.style.display = 'none';
+        } else {
+            agencyRow.style.display = 'none';
+            deptRow.style.display = '';
+        }
+        
+        if (['ZONE_LEADER', 'SUB_LEADER', 'EIC'].includes(role)) {
+            zonesRow.style.display = '';
+        } else {
+            zonesRow.style.display = 'none';
+        }
+    }
+
+    async function loadUserDetails(id) {
+        const docRef = doc(db, 'users', id);
+        const snapshot = await getDoc(docRef);
+        if (!snapshot.exists()) {
+            alert("User not found.");
+            window.location.href = '/pages/admin/users.html';
+            return;
+        }
+        const u = snapshot.data();
+        
+        document.getElementById('user-empid').value = u.employee_id || '';
+        document.getElementById('user-name').value = u.full_name || '';
+        document.getElementById('user-username').value = u.username || '';
+        document.getElementById('user-role').value = u.role || '';
+        document.getElementById('user-dept').value = u.department_id || '';
+        document.getElementById('user-agency').value = u.agency_id || '';
+        document.getElementById('user-designation').value = u.designation || '';
+        document.getElementById('user-mobile').value = u.mobile || '';
+        document.getElementById('user-email').value = u.email || '';
+        document.getElementById('user-active').checked = u.is_active;
+
+        document.getElementById('pass-req-star').innerText = '';
+        document.getElementById('pass-help').innerText = "Leave blank to keep old password.";
+        document.getElementById('user-password').required = false;
+
+        // Set zones checkboxes
+        const checkboxes = document.querySelectorAll('.zone-chk');
+        checkboxes.forEach(cb => {
+            cb.checked = (u.zone_ids || []).includes(cb.value);
+        });
+
+        toggleDynamicFormFields();
+    }
+
+    async function loadUsersList() {
+        const listBody = document.getElementById('users-list-body');
+        try {
+            const snapshot = await getDocs(query(collection(db, 'users'), orderBy('full_name')));
+            if (snapshot.empty) {
+                listBody.innerHTML = `<tr><td colspan="7" align="center" style="font-style:italic;">No user records found in Firestore.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            snapshot.docs.forEach(docSnap => {
+                const u = docSnap.data();
+                const uId = docSnap.id;
+                const statusBadge = u.is_active 
+                    ? '<span class="status-badge badge-green">Active</span>' 
+                    : '<span class="status-badge badge-red">Inactive</span>';
+                
+                const deptAgencyName = u.role === 'AGENCY' 
+                    ? `Agency: ${u.agency_id || 'N/A'}` 
+                    : (u.department_id || 'N/A');
+
+                html += `
+                    <tr>
+                        <td><strong>${u.employee_id}</strong></td>
+                        <td>${u.full_name}</td>
+                        <td>${u.username}</td>
+                        <td>${u.role}</td>
+                        <td>${deptAgencyName}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="?action=edit&id=${uId}" class="plain-link-button" style="font-size:11px; padding:2px 6px;">Edit</a>
+                            <button class="plain-link-button toggle-status-btn" data-id="${uId}" data-active="${u.is_active ? 1 : 0}" style="font-size:11px; padding:2px 6px; background:#e0a800; border:none; color:white; cursor:pointer; margin-left:5px;">Toggle</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            listBody.innerHTML = html;
+
+            // Attach toggle listeners
+            listBody.querySelectorAll('.toggle-status-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const uId = btn.getAttribute('data-id');
+                    const isActive = btn.getAttribute('data-active') === '1';
+                    if (confirm(`Are you sure you want to ${isActive ? 'deactivate' : 'activate'} this user?`)) {
+                        await updateDoc(doc(db, 'users', uId), {
+                            is_active: !isActive,
+                            updated_at: serverTimestamp()
+                        });
+                        await logAudit(currentUser.uid || currentUser.id, `Toggled active status of user doc: ${uId}`, 'users', uId);
+                        showFlash("User active status updated.");
+                        await loadUsersList();
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.error("Error fetching users list:", e);
+            listBody.innerHTML = `<tr><td colspan="7" align="center" style="color:red;">Error loading users: ${e.message}</td></tr>`;
+        }
+    }
+
+    // Submit handler
+    const form = document.getElementById('user-form');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.value = "Saving user details...";
+        
+        const empid = document.getElementById('user-empid').value.trim();
+        const name = document.getElementById('user-name').value.trim();
+        const username = document.getElementById('user-username').value.trim().toLowerCase();
+        const password = document.getElementById('user-password').value;
+        const role = document.getElementById('user-role').value;
+        const department_id = document.getElementById('user-dept').value || null;
+        const agency_id = document.getElementById('user-agency').value || null;
+        const designation = document.getElementById('user-designation').value.trim();
+        const mobile = document.getElementById('user-mobile').value.trim();
+        const email = document.getElementById('user-email').value.trim();
+        const is_active = document.getElementById('user-active').checked;
+
+        // Gather zone IDs checkboxes
+        const zone_ids = [];
+        document.querySelectorAll('.zone-chk:checked').forEach(cb => {
+            zone_ids.push(cb.value);
+        });
+
+        // Validate
+        if (editId === null && password.length < 6) {
+            alert("Password should be at least 6 characters.");
+            resetSubmitBtn();
+            return;
+        }
+        if (password && password.length < 6) {
+            alert("Password should be at least 6 characters.");
+            resetSubmitBtn();
+            return;
+        }
+
+        try {
+            if (editId) {
+                // Edit mode
+                const docRef = doc(db, 'users', editId);
+                const updates = {
+                    employee_id: empid,
+                    full_name: name,
+                    username: username,
+                    role: role,
+                    department_id: role === 'AGENCY' ? null : department_id,
+                    agency_id: role === 'AGENCY' ? agency_id : null,
+                    zone_ids: ['ZONE_LEADER', 'SUB_LEADER', 'EIC'].includes(role) ? zone_ids : [],
+                    designation: designation || null,
+                    mobile: mobile || null,
+                    email: email || null,
+                    is_active: is_active,
+                    updated_at: serverTimestamp()
+                };
+                // If password was entered, write it as a new temp plaintext password trigger (lazy signup update)
+                if (password) {
+                    updates.temp_password = password;
+                    updates.auth_created = false; // Reset to allow lazy registration update
+                }
+                await updateDoc(docRef, updates);
+                await logAudit(currentUser.uid || currentUser.id, `Edited user profile: ${username}`, 'users', editId);
+            } else {
+                // Add mode: use username as document ID to guarantee uniqueness in Firestore!
+                const docRef = doc(db, 'users', username);
+                
+                // Double check if username document already exists
+                const doubleCheck = await getDoc(docRef);
+                if (doubleCheck.exists()) {
+                    alert(`Username "${username}" already exists! Please choose another.`);
+                    resetSubmitBtn();
+                    return;
+                }
+
+                const docData = {
+                    employee_id: empid,
+                    full_name: name,
+                    username: username,
+                    role: role,
+                    department_id: role === 'AGENCY' ? null : department_id,
+                    agency_id: role === 'AGENCY' ? agency_id : null,
+                    zone_ids: ['ZONE_LEADER', 'SUB_LEADER', 'EIC'].includes(role) ? zone_ids : [],
+                    designation: designation || null,
+                    mobile: mobile || null,
+                    email: email || null,
+                    is_active: is_active,
+                    auth_created: false,
+                    temp_password: password,
+                    created_at: serverTimestamp()
+                };
+                
+                await setDoc(docRef, docData);
+                await logAudit(currentUser.uid || currentUser.id, `Added user profile: ${username}`, 'users', username);
+            }
+            
+            alert("User settings saved successfully.");
+            window.location.href = '/pages/admin/users.html';
+        } catch (err) {
+            console.error("Save user doc failed:", err);
+            alert("Save failed: " + err.message);
+            resetSubmitBtn();
+        }
+    });
+
+    function resetSubmitBtn() {
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.value = "Save User";
+    }
+
+    function showFlash(msg) {
+        const flash = document.getElementById('flash-message');
+        flash.innerText = msg;
+        flash.className = "flash flash-success";
+        flash.style.display = 'block';
+        setTimeout(() => {
+            flash.style.display = 'none';
+        }, 5000);
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Observation Details - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+    <style>
+        .timeline { margin: 20px 0; padding: 0; list-style: none; position: relative; }
+        .timeline:before { content: ''; position: absolute; top: 0; bottom: 0; width: 2px; background: #eaeaea; left: 20px; }
+        .timeline-item { margin-bottom: 20px; position: relative; }
+        .timeline-badge { width: 14px; height: 14px; border-radius: 50%; background: #007bff; position: absolute; left: 14px; top: 4px; border: 2px solid #fff; }
+        .timeline-panel { margin-left: 50px; background: #f8f9fa; padding: 15px; border-radius: 4px; border: 1px solid #eaeaea; }
+        .timeline-time { font-size: 11px; color: #777; margin-bottom: 5px; }
+        .timeline-header { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
+        .timeline-body { font-size: 13px; color: #333; line-height: 1.4; }
+        .attachment-thumbnail { display: inline-block; margin-top: 10px; margin-right: 10px; border: 1px solid #eaeaea; padding: 5px; border-radius: 4px; background: #fff; text-decoration: none; color: #0056b3; font-size: 12px; }
+        .attachment-thumbnail img { display: block; max-width: 150px; max-height: 100px; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Observation Details</h2>
+                <a href="/pages/observations/list.html" class="plain-link-button" style="background:#6c757d;">Back to List</a>
+            </div>
+            
+            <div id="status-message" class="flash" style="display:none; margin-bottom:15px;"></div>
+
+            <!-- 1. Primary Observation Card -->
+            <table class="form-table" style="width:100%; border:1px solid #eaeaea; margin-bottom:25px;" cellpadding="6" cellspacing="0">
+                <tr>
+                    <td class="label-cell" width="20%">Observation No</td>
+                    <td><strong id="obs-no">--</strong></td>
+                    <td class="label-cell" width="20%">Status</td>
+                    <td id="obs-status">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Reported By</td>
+                    <td id="obs-reporter">--</td>
+                    <td class="label-cell">Reported Date</td>
+                    <td id="obs-date">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Safety Zone</td>
+                    <td id="obs-zone">--</td>
+                    <td class="label-cell">Department</td>
+                    <td id="obs-dept">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Location/Specific Area</td>
+                    <td id="obs-location">--</td>
+                    <td class="label-cell">Priority / Risk</td>
+                    <td id="obs-risk">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">EIC Assigned</td>
+                    <td id="obs-eic">--</td>
+                    <td class="label-cell">Accident Type</td>
+                    <td id="obs-accident">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Observation Description</td>
+                    <td colspan="3" id="obs-desc" style="white-space:pre-wrap;">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Immediate Action Taken</td>
+                    <td colspan="3" id="obs-immediate" style="white-space:pre-wrap;">--</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Recommended Action</td>
+                    <td colspan="3" id="obs-recommended" style="white-space:pre-wrap;">--</td>
+                </tr>
+                <tr id="obs-photo-row" style="display:none;">
+                    <td class="label-cell">Uploaded Photo/Doc</td>
+                    <td colspan="3" id="obs-photo-container"></td>
+                </tr>
+            </table>
+
+            <!-- 2. Agency Assignment details if assigned -->
+            <div id="agency-assignment-panel" style="display:none; margin-bottom:25px;">
+                <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px;">Agency Assignment Details</h3>
+                <table class="form-table" style="width:100%; border:1px solid #eaeaea;" cellpadding="6" cellspacing="0">
+                    <tr>
+                        <td class="label-cell" width="20%">Assigned Agency</td>
+                        <td id="assign-agency-name">--</td>
+                        <td class="label-cell" width="20%">Target Closing Date</td>
+                        <td id="assign-target-date">--</td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Assigned Priority</td>
+                        <td id="assign-priority">--</td>
+                        <td class="label-cell">Assigned By</td>
+                        <td id="assign-by">--</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- 3. Workflow action forms panel -->
+            <div id="workflow-action-panel" style="margin-bottom:30px; display:none;">
+                <h3 style="border-bottom:1px solid #0056b3; padding-bottom:5px; color:#0056b3;">Workflow Remediation Action</h3>
+                <div id="workflow-form-container" style="background:#fff; padding:15px; border:1px solid #0056b3; border-radius:4px; margin-top:10px;">
+                    <!-- Action Forms will load dynamically -->
+                </div>
+            </div>
+
+            <!-- 4. Workflow history timeline -->
+            <h3 style="border-bottom:1px solid #eaeaea; padding-bottom:5px;">Workflow History Timeline</h3>
+            <ul class="timeline" id="workflow-timeline">
+                <li style="color:#777; font-style:italic;">No workflow transitions logged yet.</li>
+            </ul>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { getObservationById, userCanAccessObservation, getAllAgencies } from '/firebase/firestore.js';
+    import { getAvailableWorkflowAction, executeWorkflowAction } from '/firebase/workflow.js';
+    import { getStatusBadge, getPriorityBadge, getDueDateBadge, formatDate, formatDateTime } from '/firebase/utils.js';
+    import { uploadFile } from '/firebase/storage.js';
+    import { db } from '/firebase/firebase.js';
+    import { collection, query, where, orderBy, getDocs } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+    let currentUser = null;
+    let observationId = null;
+    let observation = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        // Get URL parameter id
+        const params = new URLSearchParams(window.location.search);
+        observationId = params.get('id');
+        if (!observationId) {
+            alert("No observation ID selected.");
+            window.location.href = '/pages/observations/list.html';
+            return;
+        }
+
+        await loadObservationDetails();
+    }).catch(err => {
+        console.error("View page init failed:", err);
+    });
+
+    async function loadObservationDetails() {
+        observation = await getObservationById(observationId);
+        if (!observation || !userCanAccessObservation(observation, currentUser)) {
+            alert("Observation not found or access denied.");
+            window.location.href = '/pages/observations/list.html';
+            return;
+        }
+
+        // Fill detail fields
+        document.getElementById('obs-no').innerText = observation.observation_no;
+        document.getElementById('obs-status').innerHTML = getStatusBadge(observation.status_name);
+        document.getElementById('obs-reporter').innerText = observation.recorded_by_name || 'N/A';
+        document.getElementById('obs-date').innerText = formatDate(observation.observation_date) + (observation.observation_time ? ` ${observation.observation_time}` : '');
+        document.getElementById('obs-zone').innerText = observation.zone_short_name || observation.zone_code || 'N/A';
+        document.getElementById('obs-dept').innerText = observation.department_name || 'N/A';
+        document.getElementById('obs-location').innerText = observation.specific_area_location || 'N/A';
+        document.getElementById('obs-risk').innerHTML = getPriorityBadge(observation.priority || observation.risk_level);
+        document.getElementById('obs-eic').innerText = observation.eic_name || 'Not Mapped/Assigned';
+        document.getElementById('obs-accident').innerText = observation.accident_type || 'None';
+        document.getElementById('obs-desc').innerText = observation.observation_description || 'N/A';
+        document.getElementById('obs-immediate').innerText = observation.immediate_action || 'None';
+        document.getElementById('obs-recommended').innerText = observation.recommended_action || 'None';
+
+        // Render photo attachment if exists
+        const photoRow = document.getElementById('obs-photo-row');
+        const photoContainer = document.getElementById('obs-photo-container');
+        if (observation.attachment_path) {
+            const path = observation.attachment_path;
+            const name = observation.attachment_original_name || 'Download Attachment';
+            const isImage = /\.(jpg|jpeg|png|gif)$/i.test(name) || path.includes('alt=media'); // Firebase token download usually holds images
+            
+            photoContainer.innerHTML = `
+                <a href="${path}" target="_blank" class="attachment-thumbnail">
+                    ${isImage ? `<img src="${path}" alt="attachment">` : ''}
+                    <span>${name}</span>
+                </a>
+            `;
+            photoRow.style.display = '';
+        } else {
+            photoRow.style.display = 'none';
+        }
+
+        // Fetch agency assignments
+        await loadAgencyAssignments();
+        
+        // Fetch timeline history
+        await loadTimelineHistory();
+
+        // Check and render workflow forms
+        const actionType = getAvailableWorkflowAction(observation, currentUser);
+        if (actionType) {
+            await renderWorkflowForm(actionType);
+        } else {
+            document.getElementById('workflow-action-panel').style.display = 'none';
+        }
+    }
+
+    async function loadAgencyAssignments() {
+        const panel = document.getElementById('agency-assignment-panel');
+        if (observation.assigned_agency_id) {
+            document.getElementById('assign-agency-name').innerText = observation.assigned_agency_name || 'N/A';
+            document.getElementById('assign-target-date').innerHTML = getDueDateBadge(observation.target_closing_date);
+            document.getElementById('assign-priority').innerHTML = getPriorityBadge(observation.priority || 'Medium');
+            
+            // Query agency assignments logs
+            const q = query(
+                collection(db, 'agency_assignments'), 
+                where('observation_id', '==', observationId), 
+                orderBy('created_at', 'desc'), 
+                limit(1)
+            );
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const data = snapshot.docs[0].data();
+                document.getElementById('assign-by').innerText = data.assigned_by_name || 'EIC';
+            }
+            panel.style.display = 'block';
+        } else {
+            panel.style.display = 'none';
+        }
+    }
+
+    async function loadTimelineHistory() {
+        const timeline = document.getElementById('workflow-timeline');
+        const q = query(
+            collection(db, 'workflow_history'), 
+            where('observation_id', '==', observationId), 
+            orderBy('created_at', 'asc')
+        );
+        const snapshot = await getDocs(q);
+        
+        // Query attachments for proof files
+        const attachQuery = query(collection(db, 'attachments'), where('observation_id', '==', observationId));
+        const attachSnap = await getDocs(attachQuery);
+        const attachmentsByAssignment = {};
+        attachSnap.docs.forEach(doc => {
+            const data = doc.data();
+            if (!attachmentsByAssignment[data.assignment_id]) {
+                attachmentsByAssignment[data.assignment_id] = [];
+            }
+            attachmentsByAssignment[data.assignment_id].push(data);
+        });
+
+        if (snapshot.empty) {
+            timeline.innerHTML = `<li style="color:#777; font-style:italic; padding-left:10px;">No timeline history found.</li>`;
+            return;
+        }
+
+        let html = '';
+        snapshot.docs.forEach(docSnap => {
+            const h = docSnap.data();
+            
+            // Look up attachments associated with this timeline event
+            // Note: in recordWorkflowAction, we map using transaction or assignment ID if present.
+            // We can match using the assignment id, or simply render proofs on completed states.
+            let attachmentsHtml = '';
+            // For completed state, fetch attachments matching EIC assignment ID
+            if (h.status_name === 'Completed by Agency') {
+                // Find matching attachments
+                Object.values(attachmentsByAssignment).forEach(arr => {
+                    arr.forEach(a => {
+                        const isImg = /\.(jpg|jpeg|png)$/i.test(a.file_name) || a.file_path.includes('alt=media');
+                        attachmentsHtml += `
+                            <a href="${a.file_path}" target="_blank" class="attachment-thumbnail">
+                                ${isImg ? `<img src="${a.file_path}" alt="proof">` : ''}
+                                <span>${a.file_name}</span>
+                            </a>
+                        `;
+                    });
+                });
+            }
+
+            html += `
+                <li class="timeline-item">
+                    <div class="timeline-badge"></div>
+                    <div class="timeline-panel">
+                        <div class="timeline-time">${formatDateTime(h.created_at)}</div>
+                        <div class="timeline-header">${h.action_taken} - ${h.full_name} (${h.role_name})</div>
+                        <div class="timeline-body">
+                            <div><strong>Remarks:</strong> ${h.remarks || 'No remarks provided.'}</div>
+                            ${h.old_status_name ? `<div><span style="font-size:11px; color:#777;">Transitioned: ${h.old_status_name} ➔ ${h.status_name}</span></div>` : ''}
+                            ${attachmentsHtml ? `<div style="margin-top:10px;"><strong>Completion Proofs:</strong><br>${attachmentsHtml}</div>` : ''}
+                        </div>
+                    </div>
+                </li>
+            `;
+        });
+        timeline.innerHTML = html;
+    }
+
+    async function renderWorkflowForm(actionType) {
+        const panel = document.getElementById('workflow-action-panel');
+        const container = document.getElementById('workflow-form-container');
+        panel.style.display = 'block';
+        
+        let html = '';
+        
+        if (actionType === 'sub_leader_review') {
+            html = `
+                <form id="action-form">
+                    <table class="form-table" style="width:100%;">
+                        <tr>
+                            <td class="label-cell" width="25%">Sub Leader Remarks <span class="required">*</span></td>
+                            <td><textarea name="remarks" rows="3" required placeholder="Enter review remarks to forward..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td><input type="submit" value="Forward to Zone Leader" class="save-button"></td>
+                        </tr>
+                    </table>
+                </form>
+            `;
+        } 
+        
+        else if (actionType === 'zone_leader_review') {
+            html = `
+                <form id="action-form">
+                    <table class="form-table" style="width:100%;">
+                        <tr>
+                            <td class="label-cell" width="25%">Verification Remarks <span class="required">*</span></td>
+                            <td><textarea name="remarks" rows="3" required placeholder="Enter verification remarks to forward to EIC..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td><input type="submit" value="Forward to EIC (Automatic Mapping)" class="save-button"></td>
+                        </tr>
+                    </table>
+                </form>
+            `;
+        } 
+        
+        else if (actionType === 'eic_assign') {
+            const agencies = await getAllAgencies();
+            let agencyOptions = '<option value="">--Select Agency--</option>';
+            agencies.forEach(a => {
+                agencyOptions += `<option value="${a.id}">${a.agency_name}</option>`;
+            });
+
+            html = `
+                <form id="action-form">
+                    <table class="form-table" style="width:100%;">
+                        <tr>
+                            <td class="label-cell" width="25%">Select Agency <span class="required">*</span></td>
+                            <td>
+                                <select name="agency_id" id="act-agency" required>
+                                    ${agencyOptions}
+                                </select>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Target Completion Date <span class="required">*</span></td>
+                            <td><input type="date" name="due_date" class="date-input" required min="${new Date().toISOString().split('T')[0]}"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Priority</td>
+                            <td>
+                                <select name="priority">
+                                    <option value="Low">Low</option>
+                                    <option value="Medium" selected>Medium</option>
+                                    <option value="High">High</option>
+                                    <option value="Critical">Critical</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Instructions/Remarks <span class="required">*</span></td>
+                            <td><textarea name="remarks" rows="3" required placeholder="Provide clear instructions for remediation..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td><input type="submit" value="Assign Agency & Target" class="save-button"></td>
+                        </tr>
+                    </table>
+                </form>
+            `;
+        } 
+        
+        else if (actionType === 'agency_start') {
+            html = `
+                <form id="action-form">
+                    <table class="form-table" style="width:100%;">
+                        <tr>
+                            <td class="label-cell" width="25%">Agency Remarks</td>
+                            <td><textarea name="remarks" rows="3" placeholder="Enter remarks to start work (optional)..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td><input type="submit" value="Start Job (Set WIP)" class="save-button"></td>
+                        </tr>
+                    </table>
+                </form>
+            `;
+        } 
+        
+        else if (actionType === 'agency_complete') {
+            html = `
+                <form id="action-form">
+                    <table class="form-table" style="width:100%;">
+                        <tr>
+                            <td class="label-cell" width="25%">Completion Remarks <span class="required">*</span></td>
+                            <td><textarea name="remarks" rows="3" required placeholder="Enter work completion details..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Upload Proof Documents <span class="required">*</span></td>
+                            <td>
+                                <input type="file" id="complete-proofs" multiple required>
+                                <span class="info-txt" style="display:block; margin-top:2px;">Select one or more photos or documents demonstrating remediation.</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td><input type="submit" value="Submit Completion Proofs" class="save-button" id="complete-submit-btn"></td>
+                        </tr>
+                    </table>
+                </form>
+            `;
+        } 
+        
+        else if (actionType === 'eic_review') {
+            html = `
+                <form id="action-form">
+                    <table class="form-table" style="width:100%;">
+                        <tr>
+                            <td class="label-cell" width="25%">Review Remarks <span class="required">*</span></td>
+                            <td><textarea name="remarks" rows="3" required placeholder="Enter review remarks to forward to Zone Leader..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td><input type="submit" value="Verify and Forward to Zone Leader" class="save-button"></td>
+                        </tr>
+                    </table>
+                </form>
+            `;
+        } 
+        
+        else if (actionType === 'zone_leader_verify') {
+            html = `
+                <form id="action-form">
+                    <table class="form-table" style="width:100%;">
+                        <tr>
+                            <td class="label-cell" width="25%">Select Verification Decision <span class="required">*</span></td>
+                            <td>
+                                <select name="decision" required>
+                                    <option value="">--Select Decision--</option>
+                                    <option value="approve">Approve & Close Case</option>
+                                    <option value="reject">Reject & Return to EIC</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Verification Remarks <span class="required">*</span></td>
+                            <td><textarea name="remarks" rows="3" required placeholder="Provide clear feedback on on-site inspection..."></textarea></td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td><input type="submit" value="Submit Verification Decision" class="save-button"></td>
+                        </tr>
+                    </table>
+                </form>
+            `;
+        } 
+        
+        else if (actionType === 'admin_all') {
+            html = `<p style="color:#666; font-style:italic;">You are logged in as Administrator. All transitions are managed automatically based on timeline states.</p>`;
+        }
+        
+        container.innerHTML = html;
+        
+        // Form submission listener
+        const actForm = document.getElementById('action-form');
+        if (actForm) {
+            actForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const submitBtn = actForm.querySelector('input[type="submit"]');
+                submitBtn.disabled = true;
+                const oldVal = submitBtn.value;
+                submitBtn.value = "Processing...";
+                
+                const formData = {
+                    remarks: actForm.remarks ? actForm.remarks.value.trim() : ''
+                };
+                
+                if (actionType === 'eic_assign') {
+                    const sel = document.getElementById('act-agency');
+                    formData.agency_id = sel.value;
+                    formData.agency_name = sel.options[sel.selectedIndex].text;
+                    formData.due_date = actForm.due_date.value;
+                    formData.priority = actForm.priority.value;
+                } 
+                
+                else if (actionType === 'zone_leader_verify') {
+                    formData.decision = actForm.decision.value;
+                } 
+                
+                else if (actionType === 'agency_complete') {
+                    // Upload files sequentially
+                    const fileInput = document.getElementById('complete-proofs');
+                    const files = fileInput.files;
+                    const uploadedFiles = [];
+                    
+                    for (let i=0; i<files.length; i++) {
+                        const file = files[i];
+                        if (file.size > 2 * 1024 * 1024) {
+                            alert(`File ${file.name} exceeds 2MB limit.`);
+                            submitBtn.disabled = false;
+                            submitBtn.value = oldVal;
+                            return;
+                        }
+                        try {
+                            const uploadRes = await uploadFile(file, 'actions');
+                            if (uploadRes.success) {
+                                uploadedFiles.push({ path: uploadRes.path, name: uploadRes.original_name });
+                            } else {
+                                alert(`Upload failed for ${file.name}: ${uploadRes.message}`);
+                                submitBtn.disabled = false;
+                                submitBtn.value = oldVal;
+                                return;
+                            }
+                        } catch (err) {
+                            alert(`Upload failed for ${file.name}: ${err.message}`);
+                            submitBtn.disabled = false;
+                            submitBtn.value = oldVal;
+                            return;
+                        }
+                    }
+                    formData.uploadedFiles = uploadedFiles;
+                }
+
+                try {
+                    await executeWorkflowAction(observationId, currentUser, actionType, formData);
+                    showFlash("Action submitted successfully!", "success");
+                    // Reload details
+                    await loadObservationDetails();
+                } catch (err) {
+                    console.error("Action submit failed:", err);
+                    showFlash("Action failed: " + err.message, "error");
+                    submitBtn.disabled = false;
+                    submitBtn.value = oldVal;
+                }
+            });
+        }
+    }
+
+    function showFlash(msg, type="success") {
+        const flash = document.getElementById('status-message');
+        flash.innerText = msg;
+        flash.className = `flash flash-${type}`;
+        flash.style.display = 'block';
+        setTimeout(() => {
+            flash.style.display = 'none';
+        }, 5000);
+    }
+</script>
+</body>
+</html>

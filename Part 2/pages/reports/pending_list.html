@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pending Observations List - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Unclosed Safety Observations (Pending List)</h2>
+                <button onclick="window.print()" class="plain-link-button" style="background:#28a745;">Print List</button>
+            </div>
+            
+            <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th width="15%">Observation ID</th>
+                        <th>Details / Location</th>
+                        <th width="12%">Priority</th>
+                        <th width="15%">Target Due Date</th>
+                        <th width="18%">Current Status</th>
+                        <th width="10%">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="pending-report-body">
+                    <tr><td colspan="6" align="center">Retrieving pending items...</td></tr>
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { generateSummaryReports } from '/firebase/reports.js';
+    import { getStatusBadge, getPriorityBadge, getDueDateBadge, formatDate } from '/firebase/utils.js';
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        await loadPendingList();
+    }).catch(err => {
+        console.error("Pending report list failed:", err);
+    });
+
+    async function loadPendingList() {
+        const body = document.getElementById('pending-report-body');
+        const data = await generateSummaryReports();
+        const pending = data.pendingReport;
+        
+        // Sort by priority (Critical > High > Medium > Low) and due date
+        const priorityWeight = { 'Critical': 1, 'High': 2, 'Medium': 3, 'Low': 4 };
+        pending.sort((a, b) => {
+            const wa = priorityWeight[a.priority || a.risk_level] || 5;
+            const wb = priorityWeight[b.priority || b.risk_level] || 5;
+            if (wa !== wb) return wa - wb;
+            return (a.target_closing_date || '9999-12-31').localeCompare(b.target_closing_date || '9999-12-31');
+        });
+
+        if (pending.length === 0) {
+            body.innerHTML = `<tr><td colspan="6" align="center" style="font-style:italic; color:#666;">No unclosed safety observations found.</td></tr>`;
+            return;
+        }
+
+        let html = '';
+        pending.forEach(obs => {
+            const priority = obs.priority || obs.risk_level || 'Medium';
+            html += `
+                <tr>
+                    <td><strong>${obs.observation_no}</strong></td>
+                    <td>
+                        <strong>${obs.department_name || ''}</strong> - ${obs.specific_area_location || ''}
+                        <div style="font-size:11px; color:#666; margin-top:2px;">
+                            Zone: ${obs.zone_short_name || obs.zone_code || ''} | Reported By: ${obs.recorded_by_name || ''}
+                        </div>
+                    </td>
+                    <td>${getPriorityBadge(priority)}</td>
+                    <td>${getDueDateBadge(obs.target_closing_date)}</td>
+                    <td>${getStatusBadge(obs.status_name)}</td>
+                    <td>
+                        <a href="/pages/observations/view.html?id=${obs.id}" class="plain-link-button">View</a>
+                    </td>
+                </tr>
+            `;
+        });
+        body.innerHTML = html;
+    }
+</script>
+</body>
+</html>

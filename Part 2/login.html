@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <style>
+        .flash-error-inline {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body class="login-body">
+    <table class="login-box" cellpadding="0" cellspacing="0">
+        <tr>
+            <td class="login-title">ONLINE SAFETY PORTAL</td>
+        </tr>
+        <tr>
+            <td class="login-subtitle">NTPC Safety Observation System</td>
+        </tr>
+        <tr>
+            <td class="login-content">
+                <div id="error-message" class="flash-error-inline" style="display: none;"></div>
+                
+                <form id="login-form" class="validate-form">
+                    <table class="form-table login-form-table" cellpadding="4" cellspacing="0">
+                        <tr>
+                            <td class="label-cell">Username</td>
+                            <td><input type="text" name="username" class="text-input" required autofocus></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Password</td>
+                            <td><input type="password" name="password" class="text-input" required></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Remember Me</td>
+                            <td><input type="checkbox" name="remember" value="1"> Keep me logged in</td>
+                        </tr>
+                        <tr>
+                            <td>&nbsp;</td>
+                            <td><input type="submit" value="Login" class="save-button"></td>
+                        </tr>
+                    </table>
+                </form>
+                <div class="demo-credentials">
+                    Demo credentials:<br>
+                    admin / password123<br>
+                    bhupendra / password123<br>
+                    ashok / password123
+                </div>
+            </td>
+        </tr>
+    </table>
+    
+    <script type="module">
+        import { initAuthCheck, loginUser } from '/firebase/auth.js';
+        
+        // Check if already authenticated and redirect
+        initAuthCheck();
+        
+        const form = document.getElementById('login-form');
+        const errorDiv = document.getElementById('error-message');
+        
+        // Parse reason from URL params (e.g. session timeout)
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('reason') === 'inactivity') {
+            errorDiv.innerText = "You have been logged out due to inactivity.";
+            errorDiv.style.display = 'block';
+        }
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorDiv.style.display = 'none';
+            
+            const username = form.username.value.trim();
+            const password = form.password.value;
+            const remember = form.remember.checked;
+            
+            try {
+                await loginUser(username, password, remember);
+                // Redirect is handled automatically by initAuthCheck auth state listener
+            } catch (err) {
+                errorDiv.innerText = err.message;
+                errorDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

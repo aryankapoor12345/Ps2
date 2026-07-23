@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Records - NTPC Online Safety Portal</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/forms.css">
+    <link rel="stylesheet" href="/assets/css/tables.css">
+</head>
+<body>
+<table class="page-shell" cellpadding="0" cellspacing="0">
+    <tr id="header-container"></tr>
+    <tr>
+        <td class="sidebar-cell" id="sidebar-container" style="display:none;"></td>
+        <td class="content-cell">
+            <h2>Search Safety Records</h2>
+            
+            <form id="search-form" class="validate-form">
+                <table class="form-table" style="width:100%;" cellpadding="4" cellspacing="0">
+                    <tr>
+                        <td class="label-cell" width="20%">Observation ID</td>
+                        <td><input type="text" name="observation_no" class="text-input" placeholder="e.g. OBS-20260601-0001"></td>
+                        <td class="label-cell" width="20%">Department</td>
+                        <td>
+                            <select name="department_id" id="search-dept">
+                                <option value="">--All Departments--</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Safety Zone</td>
+                        <td>
+                            <select name="zone_id" id="search-zone">
+                                <option value="">--All Zones--</option>
+                            </select>
+                        </td>
+                        <td class="label-cell">Employee Name / ID</td>
+                        <td><input type="text" name="employee" class="text-input" placeholder="Enter name or employee id"></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Agency</td>
+                        <td>
+                            <select name="agency_id" id="search-agency">
+                                <option value="">--All Agencies--</option>
+                            </select>
+                        </td>
+                        <td class="label-cell">Status</td>
+                        <td>
+                            <select name="status_name" id="search-status">
+                                <option value="">--All Statuses--</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Priority</td>
+                        <td>
+                            <select name="priority">
+                                <option value="">--All Priorities--</option>
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Critical">Critical</option>
+                            </select>
+                        </td>
+                        <td class="label-cell">Date Range</td>
+                        <td>
+                            <input type="date" name="date_from" class="date-input" style="width:40%; display:inline;"> to 
+                            <input type="date" name="date_to" class="date-input" style="width:40%; display:inline;">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>&nbsp;</td>
+                        <td colspan="3">
+                            <input type="submit" value="Search" class="save-button">
+                            <button type="reset" class="plain-link-button" style="background:#6c757d; color:white; border:none; padding:8px 12px; cursor:pointer; margin-left:10px;">Reset</button>
+                        </td>
+                    </tr>
+                </table>
+            </form>
+
+            <h3 style="margin-top:30px; border-bottom:1px solid #eaeaea; padding-bottom:5px;">Search Results</h3>
+            <table class="data-table" cellpadding="3" cellspacing="0" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th width="15%">Observation ID</th>
+                        <th>Location & Details</th>
+                        <th width="12%">Risk Level</th>
+                        <th width="15%">Date</th>
+                        <th width="18%">Status</th>
+                        <th width="10%">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="search-results-body">
+                    <tr><td colspan="6" align="center" style="color:#777; font-style:italic;">Enter search parameters above and click Search.</td></tr>
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    <tr id="footer-container"></tr>
+</table>
+
+<script type="module">
+    import { initAuthCheck } from '/firebase/auth.js';
+    import { enforcePageAccess } from '/firebase/roles.js';
+    import { renderHeader, renderSidebar, renderFooter } from '/components/layout.js';
+    import { getAllZones, getAllDepartments, getAllAgencies, getAllStatuses } from '/firebase/firestore.js';
+    import { searchObservations } from '/firebase/search.js';
+    import { getStatusBadge, getPriorityBadge, formatDate } from '/firebase/utils.js';
+
+    let currentUser = null;
+
+    initAuthCheck().then(async (user) => {
+        if (!user) return;
+        enforcePageAccess(user);
+        currentUser = user;
+        
+        await renderHeader(user);
+        renderSidebar(user);
+        renderFooter();
+        
+        // Populate dropdown lists
+        const zones = await getAllZones();
+        const depts = await getAllDepartments();
+        const agencies = await getAllAgencies();
+        
+        const zoneSelect = document.getElementById('search-zone');
+        zones.forEach(z => {
+            zoneSelect.innerHTML += `<option value="${z.id}">${z.zone_name}</option>`;
+        });
+        
+        const deptSelect = document.getElementById('search-dept');
+        depts.forEach(d => {
+            deptSelect.innerHTML += `<option value="${d.id}">${d.department_name}</option>`;
+        });
+        
+        const agencySelect = document.getElementById('search-agency');
+        agencies.forEach(a => {
+            agencySelect.innerHTML += `<option value="${a.id}">${a.agency_name}</option>`;
+        });
+
+        // Seed static status list
+        const statusSelect = document.getElementById('search-status');
+        const statuses = [
+            'Reported', 'Pending Sub Leader Review', 'Pending Zone Leader Review', 
+            'Pending EIC Assignment', 'Assigned to Agency', 'Work In Progress', 
+            'Completed by Agency', 'Pending Zone Verification', 'Reassigned', 'Closed'
+        ];
+        statuses.forEach(s => {
+            statusSelect.innerHTML += `<option value="${s}">${s}</option>`;
+        });
+
+    }).catch(err => {
+        console.error("Search page init failed:", err);
+    });
+
+    // Form submission search triggers
+    const form = document.getElementById('search-form');
+    const resultsBody = document.getElementById('search-results-body');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        resultsBody.innerHTML = `<tr><td colspan="6" align="center">Searching database, please wait...</td></tr>`;
+        
+        const filters = {
+            observation_no: form.observation_no.value.trim(),
+            department_id: form.department_id.value,
+            zone_id: form.zone_id.value,
+            employee: form.employee.value.trim(),
+            agency_id: form.agency_id.value,
+            status_name: form.status_name.value,
+            priority: form.priority.value,
+            date_from: form.date_from.value,
+            date_to: form.date_to.value
+        };
+        
+        try {
+            const results = await searchObservations(currentUser, filters);
+            renderSearchResults(results);
+        } catch (err) {
+            resultsBody.innerHTML = `<tr><td colspan="6" align="center" style="color:red;">Error fetching search results: ${err.message}</td></tr>`;
+        }
+    });
+
+    function renderSearchResults(results) {
+        if (results.length === 0) {
+            resultsBody.innerHTML = `<tr><td colspan="6" align="center" style="color:#777; font-style:italic;">No records matched your search filters.</td></tr>`;
+            return;
+        }
+        
+        let html = '';
+        results.forEach(obs => {
+            const p = obs.priority || obs.risk_level || 'Medium';
+            html += `
+                <tr>
+                    <td><strong>${obs.observation_no}</strong></td>
+                    <td>
+                        <strong>${obs.department_name || ''}</strong> - ${obs.specific_area_location || ''}
+                        <div style="font-size:11px; color:#666; margin-top:2px;">
+                            Zone: ${obs.zone_short_name || obs.zone_code || ''} | Reported By: ${obs.recorded_by_name || ''}
+                        </div>
+                    </td>
+                    <td>${getPriorityBadge(p)}</td>
+                    <td>${formatDate(obs.observation_date)}</td>
+                    <td>${getStatusBadge(obs.status_name)}</td>
+                    <td>
+                        <a href="/pages/observations/view.html?id=${obs.id}" class="plain-link-button">View</a>
+                    </td>
+                </tr>
+            `;
+        });
+        resultsBody.innerHTML = html;
+    }
+</script>
+</body>
+</html>
