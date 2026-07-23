@@ -1,0 +1,21 @@
+.sidebar-cell,
+.top-header,
+.footer-cell,
+.save-button,
+.plain-button,
+.plain-link-button,
+.filter-table,
+.table-actions {
+    display: none;
+}
+
+.page-shell,
+.content-cell {
+    width: 100%;
+    border: 0;
+    padding: 0;
+}
+
+body {
+    font-size: 11px;
+}

@@ -1,0 +1,71 @@
+.data-table,
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #8aa9c0;
+}
+
+.data-table th,
+.report-table th {
+    background: #cfe8f7;
+    color: #000000;
+    border: 1px solid #8aa9c0;
+    padding: 4px;
+    text-align: left;
+}
+
+.data-table td,
+.report-table td {
+    border: 1px solid #b9cbd8;
+    padding: 4px;
+    vertical-align: top;
+}
+
+.data-table tr:nth-child(odd),
+.report-table tr:nth-child(odd) {
+    background: #f4fbff;
+}
+
+.data-table tr:nth-child(even),
+.report-table tr:nth-child(even) {
+    background: #ffffff;
+}
+
+.table-actions a {
+    margin-right: 6px;
+}
+
+.status-open {
+    color: #990000;
+    font-weight: bold;
+}
+
+.status-closed {
+    color: #006600;
+    font-weight: bold;
+}
+
+.detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #9eb6c8;
+    margin-bottom: 12px;
+}
+
+.detail-table td {
+    border: 1px solid #c8dce8;
+    padding: 5px;
+    vertical-align: top;
+}
+
+.detail-table tr:nth-child(odd) {
+    background: #eef7fc;
+}
+
+.detail-table tr:nth-child(even) {
+    background: #ffffff;
+}
+
+.observation-list-table {
+    font-size: 11px;
+}
